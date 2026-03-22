@@ -24,12 +24,10 @@ void testBlockAligned()
     byte[] b2 = Enumerable.Repeat<byte>(0b_1010_0001, 32).ToArray();
     Span<sbyte> tb1 = new Span<sbyte>(b1);
     Span<byte> tb2 = new Span<byte>(b2);
-    var dd = kernel.BasicProcessOne(tb1, tb2);
-    var dd1 = kernel.TensorProcessOne(b1, b2);
-    var dd2 = kernel.VectorProcessOne(b1, b2);
-    Console.WriteLine($"BasicProcessOne:{dd}");
-    Console.WriteLine($"TensorProcessOne:{dd1}");
-    Console.WriteLine($"VectorProcessOne:{dd2}");
+    Console.WriteLine($"BasicProcessOne:{kernel.BasicProcessOne(tb1, tb2)}");
+    Console.WriteLine($"TensorProcessOne:{kernel.TensorProcessOne(b1, b2)}");
+    Console.WriteLine($"VectorProcessOne:{kernel.VectorProcessOne(b1, b2)}");
+    Console.WriteLine($"VectorProcessOne_Test2:{kernel.VectorProcessOne_Test2(b1, b2)}");
 }
 void testBlockNotAligned()
 {

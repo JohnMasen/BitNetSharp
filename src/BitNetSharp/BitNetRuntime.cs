@@ -4,10 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace BitNetSharp.Models
+namespace BitNetSharp
 {
-    public class BitNetModel
+    public class BitNetRuntime
     {
-
     }
 }
