@@ -416,3 +416,4 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+/Models/bitnet-b1.58-2B-4T-gguf/ggml-model-i2_s.gguf
