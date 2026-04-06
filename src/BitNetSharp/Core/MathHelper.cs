@@ -12,7 +12,7 @@ namespace BitNetSharp.Core
 {
     public class MathHelper
     {
-        public static  int VectorProcessOne_Test2(scoped ReadOnlySpan<sbyte> dataBlock, scoped ReadOnlySpan<byte> weightBlock)
+        public static  int VectorProcessOne(scoped ReadOnlySpan<sbyte> dataBlock, scoped ReadOnlySpan<byte> weightBlock)
         {
             if (dataBlock.Length != 128)
             {

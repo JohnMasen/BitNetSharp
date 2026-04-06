@@ -1,0 +1,21 @@
+﻿<Project Sdk="MSTest.Sdk/4.0.2">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseVSTest>true</UseVSTest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\BitNetSharp\BitNetSharp.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="TestData\standard_tokens.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

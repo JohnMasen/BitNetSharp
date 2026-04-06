@@ -1,0 +1,724 @@
+{
+  "version": 1,
+  "generated_at": "2026-04-04",
+  "model": "D:\\Models\\bitnet-b1.58-2B-4T-gguf\\ggml-model-i2_s.gguf",
+  "llama_dll": "D:\\GithubRoot\\BitNet\\3rdparty\\llama.cpp\\build-clang\\bin\\llama.dll",
+  "generator": "D:\\GithubRoot\\BitNet\\etc\\tests\\script\\gguf_tokenize_to_json.py",
+  "test_cases": [
+    {
+      "name": "en_basic_hello",
+      "category": "en",
+      "text": "hello world",
+      "add_bos": true,
+      "token_count": 3,
+      "token_ids": [
+        128000,
+        15339,
+        1917
+      ],
+      "reconstructed_text": "hello world",
+      "reconstructed_utf8_hex": "68656c6c6f20776f726c64",
+      "tokens": [
+        {
+          "id": 128000,
+          "text": "",
+          "utf8_hex": "",
+          "byte_length": 0,
+          "utf8_valid": true
+        },
+        {
+          "id": 15339,
+          "text": "hello",
+          "utf8_hex": "68656c6c6f",
+          "byte_length": 5,
+          "utf8_valid": true
+        },
+        {
+          "id": 1917,
+          "text": " world",
+          "utf8_hex": "20776f726c64",
+          "byte_length": 6,
+          "utf8_valid": true
+        }
+      ]
+    },
+    {
+      "name": "en_sentence_punctuation",
+      "category": "en",
+      "text": "The quick brown fox jumps over the lazy dog.",
+      "add_bos": true,
+      "token_count": 11,
+      "token_ids": [
+        128000,
+        791,
+        4062,
+        14198,
+        39935,
+        35308,
+        927,
+        279,
+        16053,
+        5679,
+        13
+      ],
+      "reconstructed_text": "The quick brown fox jumps over the lazy dog.",
+      "reconstructed_utf8_hex": "54686520717569636b2062726f776e20666f78206a756d7073206f76657220746865206c617a7920646f672e",
+      "tokens": [
+        {
+          "id": 128000,
+          "text": "",
+          "utf8_hex": "",
+          "byte_length": 0,
+          "utf8_valid": true
+        },
+        {
+          "id": 791,
+          "text": "The",
+          "utf8_hex": "546865",
+          "byte_length": 3,
+          "utf8_valid": true
+        },
+        {
+          "id": 4062,
+          "text": " quick",
+          "utf8_hex": "20717569636b",
+          "byte_length": 6,
+          "utf8_valid": true
+        },
+        {
+          "id": 14198,
+          "text": " brown",
+          "utf8_hex": "2062726f776e",
+          "byte_length": 6,
+          "utf8_valid": true
+        },
+        {
+          "id": 39935,
+          "text": " fox",
+          "utf8_hex": "20666f78",
+          "byte_length": 4,
+          "utf8_valid": true
+        },
+        {
+          "id": 35308,
+          "text": " jumps",
+          "utf8_hex": "206a756d7073",
+          "byte_length": 6,
+          "utf8_valid": true
+        },
+        {
+          "id": 927,
+          "text": " over",
+          "utf8_hex": "206f766572",
+          "byte_length": 5,
+          "utf8_valid": true
+        },
+        {
+          "id": 279,
+          "text": " the",
+          "utf8_hex": "20746865",
+          "byte_length": 4,
+          "utf8_valid": true
+        },
+        {
+          "id": 16053,
+          "text": " lazy",
+          "utf8_hex": "206c617a79",
+          "byte_length": 5,
+          "utf8_valid": true
+        },
+        {
+          "id": 5679,
+          "text": " dog",
+          "utf8_hex": "20646f67",
+          "byte_length": 4,
+          "utf8_valid": true
+        },
+        {
+          "id": 13,
+          "text": ".",
+          "utf8_hex": "2e",
+          "byte_length": 1,
+          "utf8_valid": true
+        }
+      ]
+    },
+    {
+      "name": "en_numbers_symbols",
+      "category": "en",
+      "text": "Version 1.58 uses 2-bit weights, right?",
+      "add_bos": true,
+      "token_count": 15,
+      "token_ids": [
+        128000,
+        5755,
+        220,
+        16,
+        13,
+        2970,
+        5829,
+        220,
+        17,
+        12,
+        4590,
+        14661,
+        11,
+        1314,
+        30
+      ],
+      "reconstructed_text": "Version 1.58 uses 2-bit weights, right?",
+      "reconstructed_utf8_hex": "56657273696f6e20312e3538207573657320322d62697420776569676874732c2072696768743f",
+      "tokens": [
+        {
+          "id": 128000,
+          "text": "",
+          "utf8_hex": "",
+          "byte_length": 0,
+          "utf8_valid": true
+        },
+        {
+          "id": 5755,
+          "text": "Version",
+          "utf8_hex": "56657273696f6e",
+          "byte_length": 7,
+          "utf8_valid": true
+        },
+        {
+          "id": 220,
+          "text": " ",
+          "utf8_hex": "20",
+          "byte_length": 1,
+          "utf8_valid": true
+        },
+        {
+          "id": 16,
+          "text": "1",
+          "utf8_hex": "31",
+          "byte_length": 1,
+          "utf8_valid": true
+        },
+        {
+          "id": 13,
+          "text": ".",
+          "utf8_hex": "2e",
+          "byte_length": 1,
+          "utf8_valid": true
+        },
+        {
+          "id": 2970,
+          "text": "58",
+          "utf8_hex": "3538",
+          "byte_length": 2,
+          "utf8_valid": true
+        },
+        {
+          "id": 5829,
+          "text": " uses",
+          "utf8_hex": "2075736573",
+          "byte_length": 5,
+          "utf8_valid": true
+        },
+        {
+          "id": 220,
+          "text": " ",
+          "utf8_hex": "20",
+          "byte_length": 1,
+          "utf8_valid": true
+        },
+        {
+          "id": 17,
+          "text": "2",
+          "utf8_hex": "32",
+          "byte_length": 1,
+          "utf8_valid": true
+        },
+        {
+          "id": 12,
+          "text": "-",
+          "utf8_hex": "2d",
+          "byte_length": 1,
+          "utf8_valid": true
+        },
+        {
+          "id": 4590,
+          "text": "bit",
+          "utf8_hex": "626974",
+          "byte_length": 3,
+          "utf8_valid": true
+        },
+        {
+          "id": 14661,
+          "text": " weights",
+          "utf8_hex": "2077656967687473",
+          "byte_length": 8,
+          "utf8_valid": true
+        },
+        {
+          "id": 11,
+          "text": ",",
+          "utf8_hex": "2c",
+          "byte_length": 1,
+          "utf8_valid": true
+        },
+        {
+          "id": 1314,
+          "text": " right",
+          "utf8_hex": "207269676874",
+          "byte_length": 6,
+          "utf8_valid": true
+        },
+        {
+          "id": 30,
+          "text": "?",
+          "utf8_hex": "3f",
+          "byte_length": 1,
+          "utf8_valid": true
+        }
+      ]
+    },
+    {
+      "name": "zh_basic_greeting",
+      "category": "zh",
+      "text": "你好，世界！",
+      "add_bos": true,
+      "token_count": 6,
+      "token_ids": [
+        128000,
+        57668,
+        53901,
+        3922,
+        102616,
+        6447
+      ],
+      "reconstructed_text": "你好，世界！",
+      "reconstructed_utf8_hex": "e4bda0e5a5bdefbc8ce4b896e7958cefbc81",
+      "tokens": [
+        {
+          "id": 128000,
+          "text": "",
+          "utf8_hex": "",
+          "byte_length": 0,
+          "utf8_valid": true
+        },
+        {
+          "id": 57668,
+          "text": "你",
+          "utf8_hex": "e4bda0",
+          "byte_length": 3,
+          "utf8_valid": true
+        },
+        {
+          "id": 53901,
+          "text": "好",
+          "utf8_hex": "e5a5bd",
+          "byte_length": 3,
+          "utf8_valid": true
+        },
+        {
+          "id": 3922,
+          "text": "，",
+          "utf8_hex": "efbc8c",
+          "byte_length": 3,
+          "utf8_valid": true
+        },
+        {
+          "id": 102616,
+          "text": "世界",
+          "utf8_hex": "e4b896e7958c",
+          "byte_length": 6,
+          "utf8_valid": true
+        },
+        {
+          "id": 6447,
+          "text": "！",
+          "utf8_hex": "efbc81",
+          "byte_length": 3,
+          "utf8_valid": true
+        }
+      ]
+    },
+    {
+      "name": "zh_sentence",
+      "category": "zh",
+      "text": "今天天气不错，适合做 tokenizer 测试。",
+      "add_bos": true,
+      "token_count": 14,
+      "token_ids": [
+        128000,
+        110916,
+        36827,
+        102146,
+        16937,
+        29826,
+        3922,
+        108562,
+        40862,
+        102210,
+        47058,
+        99413,
+        67735,
+        1811
+      ],
+      "reconstructed_text": "今天天气不错，适合做 tokenizer 测试。",
+      "reconstructed_utf8_hex": "e4bb8ae5a4a9e5a4a9e6b094e4b88de99499efbc8ce98082e59088e5819a20746f6b656e697a657220e6b58be8af95e38082",
+      "tokens": [
+        {
+          "id": 128000,
+          "text": "",
+          "utf8_hex": "",
+          "byte_length": 0,
+          "utf8_valid": true
+        },
+        {
+          "id": 110916,
+          "text": "今天",
+          "utf8_hex": "e4bb8ae5a4a9",
+          "byte_length": 6,
+          "utf8_valid": true
+        },
+        {
+          "id": 36827,
+          "text": "天",
+          "utf8_hex": "e5a4a9",
+          "byte_length": 3,
+          "utf8_valid": true
+        },
+        {
+          "id": 102146,
+          "text": "气",
+          "utf8_hex": "e6b094",
+          "byte_length": 3,
+          "utf8_valid": true
+        },
+        {
+          "id": 16937,
+          "text": "不",
+          "utf8_hex": "e4b88d",
+          "byte_length": 3,
+          "utf8_valid": true
+        },
+        {
+          "id": 29826,
+          "text": "错",
+          "utf8_hex": "e99499",
+          "byte_length": 3,
+          "utf8_valid": true
+        },
+        {
+          "id": 3922,
+          "text": "，",
+          "utf8_hex": "efbc8c",
+          "byte_length": 3,
+          "utf8_valid": true
+        },
+        {
+          "id": 108562,
+          "text": "适",
+          "utf8_hex": "e98082",
+          "byte_length": 3,
+          "utf8_valid": true
+        },
+        {
+          "id": 40862,
+          "text": "合",
+          "utf8_hex": "e59088",
+          "byte_length": 3,
+          "utf8_valid": true
+        },
+        {
+          "id": 102210,
+          "text": "做",
+          "utf8_hex": "e5819a",
+          "byte_length": 3,
+          "utf8_valid": true
+        },
+        {
+          "id": 47058,
+          "text": " tokenizer",
+          "utf8_hex": "20746f6b656e697a6572",
+          "byte_length": 10,
+          "utf8_valid": true
+        },
+        {
+          "id": 99413,
+          "text": " �",
+          "utf8_hex": "20e6b5",
+          "byte_length": 3,
+          "utf8_valid": false
+        },
+        {
+          "id": 67735,
+          "text": "�试",
+          "utf8_hex": "8be8af95",
+          "byte_length": 4,
+          "utf8_valid": false
+        },
+        {
+          "id": 1811,
+          "text": "。",
+          "utf8_hex": "e38082",
+          "byte_length": 3,
+          "utf8_valid": true
+        }
+      ]
+    },
+    {
+      "name": "zh_mixed_product",
+      "category": "zh",
+      "text": "BitNet 1.58 模型有 2B 参数。",
+      "add_bos": true,
+      "token_count": 16,
+      "token_ids": [
+        128000,
+        8509,
+        7099,
+        220,
+        16,
+        13,
+        2970,
+        6704,
+        45501,
+        25287,
+        19361,
+        220,
+        17,
+        33,
+        72069,
+        1811
+      ],
+      "reconstructed_text": "BitNet 1.58 模型有 2B 参数。",
+      "reconstructed_utf8_hex": "4269744e657420312e353820e6a8a1e59e8be69c8920324220e58f82e695b0e38082",
+      "tokens": [
+        {
+          "id": 128000,
+          "text": "",
+          "utf8_hex": "",
+          "byte_length": 0,
+          "utf8_valid": true
+        },
+        {
+          "id": 8509,
+          "text": "Bit",
+          "utf8_hex": "426974",
+          "byte_length": 3,
+          "utf8_valid": true
+        },
+        {
+          "id": 7099,
+          "text": "Net",
+          "utf8_hex": "4e6574",
+          "byte_length": 3,
+          "utf8_valid": true
+        },
+        {
+          "id": 220,
+          "text": " ",
+          "utf8_hex": "20",
+          "byte_length": 1,
+          "utf8_valid": true
+        },
+        {
+          "id": 16,
+          "text": "1",
+          "utf8_hex": "31",
+          "byte_length": 1,
+          "utf8_valid": true
+        },
+        {
+          "id": 13,
+          "text": ".",
+          "utf8_hex": "2e",
+          "byte_length": 1,
+          "utf8_valid": true
+        },
+        {
+          "id": 2970,
+          "text": "58",
+          "utf8_hex": "3538",
+          "byte_length": 2,
+          "utf8_valid": true
+        },
+        {
+          "id": 6704,
+          "text": " �",
+          "utf8_hex": "20e6",
+          "byte_length": 2,
+          "utf8_valid": false
+        },
+        {
+          "id": 45501,
+          "text": "��",
+          "utf8_hex": "a8a1",
+          "byte_length": 2,
+          "utf8_valid": false
+        },
+        {
+          "id": 25287,
+          "text": "型",
+          "utf8_hex": "e59e8b",
+          "byte_length": 3,
+          "utf8_valid": true
+        },
+        {
+          "id": 19361,
+          "text": "有",
+          "utf8_hex": "e69c89",
+          "byte_length": 3,
+          "utf8_valid": true
+        },
+        {
+          "id": 220,
+          "text": " ",
+          "utf8_hex": "20",
+          "byte_length": 1,
+          "utf8_valid": true
+        },
+        {
+          "id": 17,
+          "text": "2",
+          "utf8_hex": "32",
+          "byte_length": 1,
+          "utf8_valid": true
+        },
+        {
+          "id": 33,
+          "text": "B",
+          "utf8_hex": "42",
+          "byte_length": 1,
+          "utf8_valid": true
+        },
+        {
+          "id": 72069,
+          "text": " 参数",
+          "utf8_hex": "20e58f82e695b0",
+          "byte_length": 7,
+          "utf8_valid": true
+        },
+        {
+          "id": 1811,
+          "text": "。",
+          "utf8_hex": "e38082",
+          "byte_length": 3,
+          "utf8_valid": true
+        }
+      ]
+    },
+    {
+      "name": "zh_multiline",
+      "category": "zh",
+      "text": "第一行：中文测试。\n第二行：继续验证。",
+      "add_bos": false,
+      "token_count": 13,
+      "token_ids": [
+        103983,
+        23039,
+        5232,
+        108891,
+        82805,
+        1811,
+        198,
+        106135,
+        23039,
+        5232,
+        114638,
+        50027,
+        1811
+      ],
+      "reconstructed_text": "第一行：中文测试。\n第二行：继续验证。",
+      "reconstructed_utf8_hex": "e7acace4b880e8a18cefbc9ae4b8ade69687e6b58be8af95e380820ae7acace4ba8ce8a18cefbc9ae7bba7e7bbade9aa8ce8af81e38082",
+      "tokens": [
+        {
+          "id": 103983,
+          "text": "第一",
+          "utf8_hex": "e7acace4b880",
+          "byte_length": 6,
+          "utf8_valid": true
+        },
+        {
+          "id": 23039,
+          "text": "行",
+          "utf8_hex": "e8a18c",
+          "byte_length": 3,
+          "utf8_valid": true
+        },
+        {
+          "id": 5232,
+          "text": "：",
+          "utf8_hex": "efbc9a",
+          "byte_length": 3,
+          "utf8_valid": true
+        },
+        {
+          "id": 108891,
+          "text": "中文",
+          "utf8_hex": "e4b8ade69687",
+          "byte_length": 6,
+          "utf8_valid": true
+        },
+        {
+          "id": 82805,
+          "text": "测试",
+          "utf8_hex": "e6b58be8af95",
+          "byte_length": 6,
+          "utf8_valid": true
+        },
+        {
+          "id": 1811,
+          "text": "。",
+          "utf8_hex": "e38082",
+          "byte_length": 3,
+          "utf8_valid": true
+        },
+        {
+          "id": 198,
+          "text": "\n",
+          "utf8_hex": "0a",
+          "byte_length": 1,
+          "utf8_valid": true
+        },
+        {
+          "id": 106135,
+          "text": "第二",
+          "utf8_hex": "e7acace4ba8c",
+          "byte_length": 6,
+          "utf8_valid": true
+        },
+        {
+          "id": 23039,
+          "text": "行",
+          "utf8_hex": "e8a18c",
+          "byte_length": 3,
+          "utf8_valid": true
+        },
+        {
+          "id": 5232,
+          "text": "：",
+          "utf8_hex": "efbc9a",
+          "byte_length": 3,
+          "utf8_valid": true
+        },
+        {
+          "id": 114638,
+          "text": "继续",
+          "utf8_hex": "e7bba7e7bbad",
+          "byte_length": 6,
+          "utf8_valid": true
+        },
+        {
+          "id": 50027,
+          "text": "验证",
+          "utf8_hex": "e9aa8ce8af81",
+          "byte_length": 6,
+          "utf8_valid": true
+        },
+        {
+          "id": 1811,
+          "text": "。",
+          "utf8_hex": "e38082",
+          "byte_length": 3,
+          "utf8_valid": true
+        }
+      ]
+    }
+  ]
+}

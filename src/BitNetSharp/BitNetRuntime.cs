@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.ML.Tokenizers;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,5 +9,6 @@ namespace BitNetSharp
 {
     public class BitNetRuntime
     {
+        public Tokenizer ModelToeknizer { get; set; }
     }
 }

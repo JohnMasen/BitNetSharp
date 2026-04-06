@@ -3,6 +3,7 @@
     <Project Path="src/BitNetSharp/BitNetSharp.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/BitNetSharp.Tests/BitNetSharp.Tests.csproj" />
+    <File Path="../BitNet/etc/standard_tokens.json" />
   </Folder>
+  <Project Path="src/tests/BitNetSharp.Tests/BitNetSharp.Tests.csproj" Id="5e6a2d67-2b99-416e-8d92-a8b402026c35" />
 </Solution>
