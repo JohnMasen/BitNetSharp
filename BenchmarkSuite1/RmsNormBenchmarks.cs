@@ -1,5 +1,6 @@
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Order;
+using BitNetSharp.Core;
 using BitNetSharp.Layers;
 using BitNetSharp.Models;
 using System;
@@ -14,10 +15,13 @@ namespace BitNetSharp.Benchmarks;
 public class RmsNormBenchmarks
 {
     private BitNetModel? model;
-    private float[]? input;
-    private RmsNormLayer? cpuLayer;
-    private RmsNormLayer? tensorLayer;
-    private RmsNormLayer? simdLayer;
+    private BitNetSession? session;
+    private RmsNormLayer? cpuSingleThreadLayer;
+    private RmsNormLayer? cpuMultiThreadLayer;
+    private RmsNormLayer? tensorSingleThreadLayer;
+    private RmsNormLayer? tensorMultiThreadLayer;
+    private RmsNormLayer? simdSingleThreadLayer;
+    private RmsNormLayer? simdMultiThreadLayer;
     [GlobalSetup]
     public void GlobalSetup()
     {
@@ -25,17 +29,52 @@ public class RmsNormBenchmarks
         model.Load(BenchmarkProjectPaths.ModelPath);
         var normTensor = model.GetLayer(0).AttentionNorm;
         var embeddingLayer = new EmbeddingLayer(model, enableCache: true);
-        var context = new InferenceContext(model)
+        embeddingLayer.Init();
+        var session = new BitNetSession(model)
         {
             Tokens = [0],
             CurrentToken = 0,
         };
-        input = embeddingLayer.Forward(context);
-        cpuLayer = new RmsNormLayer(model, normTensor, RmsNormBackend.CPUStandard, enableCache: true);
-        tensorLayer = new RmsNormLayer(model, normTensor, RmsNormBackend.Tensor, enableCache: true);
+        this.session = session;
+        embeddingLayer.Forward(session);
+        cpuSingleThreadLayer = new RmsNormLayer(
+            model,
+            normTensor,
+            enableCache: true,
+            inferenceConfig: new InferenceConfig(InferenceBackend.CPU, 1));
+        cpuSingleThreadLayer.Init();
+        cpuMultiThreadLayer = new RmsNormLayer(
+            model,
+            normTensor,
+            enableCache: true,
+            inferenceConfig: new InferenceConfig(InferenceBackend.CPU, InferenceConfig.AutoThreadCount));
+        cpuMultiThreadLayer.Init();
+        tensorSingleThreadLayer = new RmsNormLayer(
+            model,
+            normTensor,
+            enableCache: true,
+            inferenceConfig: new InferenceConfig(InferenceBackend.Tensor, 1));
+        tensorSingleThreadLayer.Init();
+        tensorMultiThreadLayer = new RmsNormLayer(
+            model,
+            normTensor,
+            enableCache: true,
+            inferenceConfig: new InferenceConfig(InferenceBackend.Tensor, InferenceConfig.AutoThreadCount));
+        tensorMultiThreadLayer.Init();
         if (Avx.IsSupported && Avx2.IsSupported)
         {
-            simdLayer = new RmsNormLayer(model, normTensor, RmsNormBackend.SIMD, enableCache: true);
+            simdSingleThreadLayer = new RmsNormLayer(
+                model,
+                normTensor,
+                enableCache: true,
+                inferenceConfig: new InferenceConfig(InferenceBackend.SIMD, 1));
+            simdSingleThreadLayer.Init();
+            simdMultiThreadLayer = new RmsNormLayer(
+                model,
+                normTensor,
+                enableCache: true,
+                inferenceConfig: new InferenceConfig(InferenceBackend.SIMD, InferenceConfig.AutoThreadCount));
+            simdMultiThreadLayer.Init();
         }
     }
 
@@ -44,25 +83,53 @@ public class RmsNormBenchmarks
     {
         model?.Dispose();
         model = null;
-        input = null;
-        cpuLayer = null;
-        tensorLayer = null;
-        simdLayer = null;
+        session = null;
+        cpuSingleThreadLayer = null;
+        cpuMultiThreadLayer = null;
+        tensorSingleThreadLayer = null;
+        tensorMultiThreadLayer = null;
+        simdSingleThreadLayer = null;
+        simdMultiThreadLayer = null;
     }
 
     [Benchmark(Baseline = true)]
-    public float[] CPUStandard() => cpuLayer!.Forward(input!);
+    public float[] RmsNorm_CPU_SingleThread() => Run(cpuSingleThreadLayer!);
+
     [Benchmark]
-    public float[] Tensor() => tensorLayer!.Forward(input!);
+    public float[] RmsNorm_CPU_MultiThread() => Run(cpuMultiThreadLayer!);
+
     [Benchmark]
-    public float[] SIMD()
+    public float[] RmsNorm_Tensor_SingleThread() => Run(tensorSingleThreadLayer!);
+
+    [Benchmark]
+    public float[] RmsNorm_Tensor_MultiThread() => Run(tensorMultiThreadLayer!);
+
+    [Benchmark]
+    public float[] RmsNorm_SIMD_SingleThread()
     {
-        if (simdLayer is null)
+        if (simdSingleThreadLayer is null)
         {
             throw new PlatformNotSupportedException("RMSNorm SIMD benchmark requires AVX2 support.");
         }
 
-        return simdLayer.Forward(input!);
+        return Run(simdSingleThreadLayer);
+    }
+
+    [Benchmark]
+    public float[] RmsNorm_SIMD_MultiThread()
+    {
+        if (simdMultiThreadLayer is null)
+        {
+            throw new PlatformNotSupportedException("RMSNorm SIMD benchmark requires AVX2 support.");
+        }
+
+        return Run(simdMultiThreadLayer);
+    }
+
+    private float[] Run(RmsNormLayer layer)
+    {
+        layer.Forward(session!);
+        return session!.RmsNorm!;
     }
 }
 

@@ -3,8 +3,18 @@
 ## Project Guidelines
 - The user wants scope changes to focus on adding new tokenizer unit tests rather than unrelated structural refactors when they explicitly ask for tests.
 - For BitNet tokenizer alignment, only consider the authoritative non-C# source in the BitNet repo; do not use the deleted `D:\GithubRoot\BitNet\src\csharp` directory as a reference.
+- For BitNet QKV work, use `MathHelper.VectorProcessOne()` only as a reference example and validate the algorithm primarily against the authoritative BitNet source to avoid carrying over mistakes from the example implementation. Use `QKV` with all three letters capitalized in naming, including in file names across the whole solution, such as `QKVLayerTests.cs`.
+- When investigating algorithm issues in this repo, avoid relying on large test output; prefer targeted test runs and concise summaries over large raw logs.
 - The user plans to optimize the layer structure in the future using abstractions like `ICacheableLayer` and `LayerBase`, but does not want those structural changes made yet.
 - Do not modify the user's self-written test files unless they explicitly ask for changes to those tests.
+- Continue with straightforward repo changes without waiting for extra confirmation.
+- Do not proactively fix warnings in this repo. Only address warnings when the user explicitly asks. The user accepts that some warnings may be unavoidable.
+- Eliminate `InferenceContext` and migrate its contents into `BitNetSession`, avoiding separate runtime-context abstractions for this area of the repo.
+- For layers in this repo, `Forward` must not be allowed before an explicit `Init` call. `Init` performs internal initialization, currently only eager cache loading.
+- For this repo's transformer pipeline, the attention layer input should be the QKV projection output, not the RMSNorm output directly.
+
+## QKV Parallel Work Instructions
+- For QKV parallel work, `ThreadHelper` should support optional block-aligned splitting. Default splitting should not enforce alignment; only SIMD callers should pass an alignment parameter based on the required data byte length.
 
 ## Code Style
 - Prefer `for` loops to initialize the index variable inside the `for` statement rather than using a prior assignment like `int index = 0; for (; index < ...; ... )`.
@@ -18,6 +28,8 @@
 
 ## Layer Testing Instructions
 - Keep `EmbeddingLayer` tests in a separate `LayerTests.cs` file.
+- For QKV tests, prefer data-driven tests that pass only a `CaseId` or sequence number, and load the full test data inside the test method to avoid oversized test output.
+- For debugging large data-driven tests in this repo, prefer running a single representative case or adding a dedicated single-case test instead of executing many similar cases.
 
 ## GGUF Metadata Mapping Instructions
 - For GGUF metadata mapping design, keep `LoadOptions` minimal: retain only a metadata parser callback and pass GGUF meta information to a caller-provided parser, allowing that parser to return a structured result instead of using complex per-field schema/default mapping inside `SchemaMapping`.
@@ -30,3 +42,6 @@
 - Prefer a correct pure CPU implementation of RMSNorm first, with a constructor selector defaulting to `CPUStandard` and future Tensor/SIMD backends left as placeholders.
 - For SIMD implementations, reference `MathHelper.sum4` for fast summation patterns.
 - When refactoring performance-sensitive helpers such as RMSNorm internals, apply `MethodImplOptions.AggressiveInlining` where appropriate.
+
+## CSV Output Instructions
+- When the user asks for CSV output, preserve actual line breaks clearly, preferably in a fenced CSV block to avoid collapsing into one line.

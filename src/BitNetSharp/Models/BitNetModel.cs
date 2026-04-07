@@ -351,11 +351,19 @@ namespace BitNetSharp.Models
                     GetRequiredTensor(tensors, $"blk.{layerIndex}.attn_k.weight"),
                     GetRequiredTensor(tensors, $"blk.{layerIndex}.attn_v.weight"),
                     GetRequiredTensor(tensors, $"blk.{layerIndex}.attn_output.weight"),
+                    GetOptionalTensor(tensors, $"blk.{layerIndex}.attn_output.scale"),
+                    GetOptionalTensor(tensors, $"blk.{layerIndex}.attn_output.bias"),
                     GetRequiredTensor(tensors, $"blk.{layerIndex}.ffn_norm.weight"),
                     GetRequiredTensor(tensors, $"blk.{layerIndex}.ffn_sub_norm.weight"),
                     GetRequiredTensor(tensors, $"blk.{layerIndex}.ffn_gate.weight"),
                     GetRequiredTensor(tensors, $"blk.{layerIndex}.ffn_up.weight"),
                     GetRequiredTensor(tensors, $"blk.{layerIndex}.ffn_down.weight"));
+            }
+
+            private static BitNetTensorInfo? GetOptionalTensor(IReadOnlyDictionary<string, BitNetTensorInfo> tensors, string tensorName)
+            {
+                tensors.TryGetValue(tensorName, out BitNetTensorInfo? tensor);
+                return tensor;
             }
 
             private static BitNetTensorInfo GetRequiredTensor(IReadOnlyDictionary<string, BitNetTensorInfo> tensors, string tensorName)
@@ -408,6 +416,8 @@ namespace BitNetSharp.Models
                     var name when name.EndsWith("attn_q.weight", StringComparison.Ordinal) => BitNetTensorRole.AttentionQueryWeight,
                     var name when name.EndsWith("attn_k.weight", StringComparison.Ordinal) => BitNetTensorRole.AttentionKeyWeight,
                     var name when name.EndsWith("attn_v.weight", StringComparison.Ordinal) => BitNetTensorRole.AttentionValueWeight,
+                    var name when name.EndsWith("attn_output.scale", StringComparison.Ordinal) => BitNetTensorRole.AttentionOutputScale,
+                    var name when name.EndsWith("attn_output.bias", StringComparison.Ordinal) => BitNetTensorRole.AttentionOutputBias,
                     var name when name.EndsWith("attn_output.weight", StringComparison.Ordinal) => BitNetTensorRole.AttentionOutputWeight,
                     var name when name.EndsWith("ffn_norm.weight", StringComparison.Ordinal) => BitNetTensorRole.FeedForwardNorm,
                     var name when name.EndsWith("ffn_sub_norm.weight", StringComparison.Ordinal) => BitNetTensorRole.FeedForwardSubNorm,

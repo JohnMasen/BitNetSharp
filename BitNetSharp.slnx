@@ -4,8 +4,7 @@
   </Folder>
   <Folder Name="/tests/">
     <File Path="../../Models/bitnet-b1.58-2B-4T-gguf/ggufdef.txt" />
-    <File Path="../BitNet/etc/standard_tokens.json" />
   </Folder>
-  <Project Path="src/tests/BitNetSharp.Tests/BitNetSharp.Tests.csproj" Id="5e6a2d67-2b99-416e-8d92-a8b402026c35" />
   <Project Path="BenchmarkSuite1/BenchmarkSuite1.csproj" Id="8b7bf3f6-14c9-49c8-ae9c-a88fa4fd438a" />
+  <Project Path="src/tests/BitNetSharp.Tests/BitNetSharp.Tests.csproj" Id="5e6a2d67-2b99-416e-8d92-a8b402026c35" />
 </Solution>

@@ -6,21 +6,21 @@ using System.Runtime.InteropServices;
 
 namespace BitNetSharp.Layers
 {
+    /// <summary>
+    /// Applies RMS normalization to the embedding data stored on a <see cref="BitNetSession"/>.
+    /// Call <see cref="Init"/> before invoking <see cref="Forward(BitNetSession)"/>.
+    /// </summary>
     public sealed class RmsNormLayer
     {
         private readonly BitNetModel model;
         private readonly BitNetTensorInfo normTensor;
         private float[]? cachedNormWeights;
+        private bool isInitialized;
 
-        public RmsNormLayer(BitNetModel model, BitNetTensorInfo normTensor, RmsNormBackend backend = RmsNormBackend.CPUStandard, bool enableCache = false)
+        public RmsNormLayer(BitNetModel model, BitNetTensorInfo normTensor, bool enableCache = false, InferenceConfig? inferenceConfig = null)
         {
             ArgumentNullException.ThrowIfNull(model);
             ArgumentNullException.ThrowIfNull(normTensor);
-
-            if (backend != RmsNormBackend.CPUStandard && backend != RmsNormBackend.Tensor && backend != RmsNormBackend.SIMD)
-            {
-                throw new NotSupportedException($"RMSNorm backend '{backend}' is not implemented yet.");
-            }
 
             if (model.Config is null)
             {
@@ -29,21 +29,50 @@ namespace BitNetSharp.Layers
 
             this.model = model;
             this.normTensor = normTensor;
-            Backend = backend;
             EnableCache = enableCache;
+            InferenceConfig = inferenceConfig ?? CreateDefaultInferenceConfig();
 
             ValidateTensorShape();
             ValidateTensorType();
         }
 
-        public RmsNormBackend Backend { get; }
-
         public bool EnableCache { get; }
 
+        public InferenceConfig InferenceConfig { get; }
+
+        public void Init()
+        {
+            if (EnableCache)
+            {
+                _ = EnsureCachedNormWeights();
+            }
+
+            isInitialized = true;
+        }
+
+        private static InferenceConfig CreateDefaultInferenceConfig()
+        {
+            return new InferenceConfig(InferenceBackend.SIMD, 1);
+        }
+
         /// <summary>
-        /// Applies RMSNorm to the provided hidden state using the configured norm weights.
+        /// Applies RMSNorm to the embedding stored on the session.
         /// </summary>
-        public float[] Forward(ReadOnlySpan<float> input)
+        public void Forward(BitNetSession session)
+        {
+            ArgumentNullException.ThrowIfNull(session);
+            EnsureInitialized();
+
+            if (!ReferenceEquals(session.Model, model))
+            {
+                throw new InvalidOperationException("The session was created for a different model instance.");
+            }
+
+            float[] input = session.Embedding ?? throw new InvalidOperationException("Session does not contain embedding output.");
+            session.RmsNorm = ForwardCore(input);
+        }
+
+        private float[] ForwardCore(ReadOnlySpan<float> input)
         {
             if (input.IsEmpty)
             {
@@ -66,13 +95,14 @@ namespace BitNetSharp.Layers
             }
 
             normWeights = normWeights[..input.Length];
+            int threads = InferenceConfig.ThreadCount;
 
-            return Backend switch
+            return InferenceConfig.Backend switch
             {
-                RmsNormBackend.CPUStandard => MathHelper.ForwardRmsNormCpuStandard(input, normWeights, model.Config.AttentionLayerNormRmsEpsilon),
-                RmsNormBackend.SIMD => MathHelper.ForwardRmsNormSimd(input, normWeights, model.Config.AttentionLayerNormRmsEpsilon),
-                RmsNormBackend.Tensor => MathHelper.ForwardRmsNormTensor(input, normWeights, model.Config.AttentionLayerNormRmsEpsilon),
-                _ => throw new NotSupportedException($"RMSNorm backend '{Backend}' is not implemented yet."),
+                InferenceBackend.CPU => MathHelper.ForwardRmsNormCpuStandard(input, normWeights, model.Config.AttentionLayerNormRmsEpsilon, threads),
+                InferenceBackend.SIMD => MathHelper.ForwardRmsNormSimd(input, normWeights, model.Config.AttentionLayerNormRmsEpsilon, threads),
+                InferenceBackend.Tensor => MathHelper.ForwardRmsNormTensor(input, normWeights, model.Config.AttentionLayerNormRmsEpsilon, threads),
+                _ => throw new NotSupportedException($"RMSNorm backend '{InferenceConfig.Backend}' is not implemented yet."),
             };
         }
 
@@ -108,6 +138,14 @@ namespace BitNetSharp.Layers
         private float[] EnsureCachedNormWeights()
         {
             return cachedNormWeights ??= ReadNormWeights();
+        }
+
+        private void EnsureInitialized()
+        {
+            if (!isInitialized)
+            {
+                throw new InvalidOperationException("The layer must be initialized by calling Init before Forward.");
+            }
         }
 
         private static float[] ConvertHalfToSingle(ReadOnlySpan<Half> source)

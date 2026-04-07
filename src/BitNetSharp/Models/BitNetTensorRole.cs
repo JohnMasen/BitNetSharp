@@ -11,6 +11,8 @@ namespace BitNetSharp.Models
         AttentionKeyWeight,
         AttentionValueWeight,
         AttentionOutputWeight,
+        AttentionOutputScale,
+        AttentionOutputBias,
         FeedForwardNorm,
         FeedForwardSubNorm,
         FeedForwardGateWeight,

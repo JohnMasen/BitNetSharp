@@ -19,11 +19,13 @@ namespace BitNetSharp.Tests
         {
             using var model = TestModelFactory.LoadModel();
             var layer = new BitNetSharp.Layers.EmbeddingLayer(model);
-            var context = TestModelFactory.CreateInferenceContext(model, token: 0);
+            var context = TestModelFactory.CreateSession(model, token: 0);
 
-            float[] embedding = layer.Forward(context);
+            layer.Init();
+            layer.Forward(context);
+            float[] embedding = context.Embedding!;
 
-            Assert.AreEqual((int)model.Config!.EmbeddingLength, embedding.Length);
+            Assert.HasCount((int)model.Config!.EmbeddingLength, embedding);
         }
 
         [TestMethod]
@@ -31,9 +33,20 @@ namespace BitNetSharp.Tests
         {
             using var model = TestModelFactory.LoadModel();
             var layer = new BitNetSharp.Layers.EmbeddingLayer(model);
-            var context = TestModelFactory.CreateInferenceContext(model, token: (int)model.Config!.VocabularySize);
+            var context = TestModelFactory.CreateSession(model, token: (int)model.Config!.VocabularySize);
 
+            layer.Init();
             Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => layer.Forward(context));
+        }
+
+        [TestMethod]
+        public void Embedding_ForwardWithoutInit_Throws()
+        {
+            using var model = TestModelFactory.LoadModel();
+            var layer = new BitNetSharp.Layers.EmbeddingLayer(model);
+            var context = TestModelFactory.CreateSession(model, token: 0);
+
+            Assert.ThrowsExactly<InvalidOperationException>(() => layer.Forward(context));
         }
 
         [TestMethod]
@@ -42,10 +55,28 @@ namespace BitNetSharp.Tests
             using var model = TestModelFactory.LoadModel();
             var uncachedLayer = new BitNetSharp.Layers.EmbeddingLayer(model);
             var cachedLayer = new BitNetSharp.Layers.EmbeddingLayer(model, enableCache: true);
-            var context = TestModelFactory.CreateInferenceContext(model, token: 0);
+            var uncachedContext = TestModelFactory.CreateSession(model, token: 0);
+            var cachedContext = TestModelFactory.CreateSession(model, token: 0);
 
-            CollectionAssert.AreEqual(uncachedLayer.Forward(context), cachedLayer.Forward(context));
+            uncachedLayer.Init();
+            cachedLayer.Init();
+            uncachedLayer.Forward(uncachedContext);
+            cachedLayer.Forward(cachedContext);
+
+            CollectionAssert.AreEqual(uncachedContext.Embedding, cachedContext.Embedding);
             Assert.IsTrue(cachedLayer.EnableCache);
+        }
+
+        [TestMethod]
+        public void Embedding_NullConfig_CreatesNewInstance()
+        {
+            using var model = TestModelFactory.LoadModel();
+            var firstLayer = new BitNetSharp.Layers.EmbeddingLayer(model, inferenceConfig: null);
+            var secondLayer = new BitNetSharp.Layers.EmbeddingLayer(model, inferenceConfig: null);
+
+            Assert.AreEqual(BitNetSharp.Layers.InferenceBackend.CPU, firstLayer.InferenceConfig.Backend);
+            Assert.AreEqual(1, firstLayer.InferenceConfig.ThreadCount);
+            Assert.AreNotSame(firstLayer.InferenceConfig, secondLayer.InferenceConfig);
         }
 
         [TestMethod]
@@ -54,11 +85,13 @@ namespace BitNetSharp.Tests
         {
             using var model = TestModelFactory.LoadModel();
             var layer = new BitNetSharp.Layers.EmbeddingLayer(model);
-            var context = TestModelFactory.CreateInferenceContext(model, tokenId);
+            var context = TestModelFactory.CreateSession(model, tokenId);
 
-            float[] actualValues = layer.Forward(context);
+            layer.Init();
+            layer.Forward(context);
+            float[] actualValues = context.Embedding!;
 
-            Assert.AreEqual(expectedValues.Length, actualValues.Length, caseName);
+            Assert.HasCount(expectedValues.Length, actualValues, caseName);
             CollectionAssert.AreEqual(expectedValues, actualValues, caseName);
         }
 
@@ -72,13 +105,27 @@ namespace BitNetSharp.Tests
         }
 
         [TestMethod]
-        public void RmsNorm_DefaultsToCpuStandard()
+        public void RmsNorm_DefaultConfig_SimdSingleThread()
         {
             using var model = TestModelFactory.LoadModel();
             var normTensor = model.GetLayer(0).AttentionNorm;
             var layer = new BitNetSharp.Layers.RmsNormLayer(model, normTensor);
 
-            Assert.AreEqual(BitNetSharp.Layers.RmsNormBackend.CPUStandard, layer.Backend);
+            Assert.AreEqual(BitNetSharp.Layers.InferenceBackend.SIMD, layer.InferenceConfig.Backend);
+            Assert.AreEqual(1, layer.InferenceConfig.ThreadCount);
+        }
+
+        [TestMethod]
+        public void RmsNorm_NullConfig_CreatesNewInstance()
+        {
+            using var model = TestModelFactory.LoadModel();
+            var normTensor = model.GetLayer(0).AttentionNorm;
+            var firstLayer = new BitNetSharp.Layers.RmsNormLayer(model, normTensor, inferenceConfig: null);
+            var secondLayer = new BitNetSharp.Layers.RmsNormLayer(model, normTensor, inferenceConfig: null);
+
+            Assert.AreEqual(BitNetSharp.Layers.InferenceBackend.SIMD, firstLayer.InferenceConfig.Backend);
+            Assert.AreEqual(1, firstLayer.InferenceConfig.ThreadCount);
+            Assert.AreNotSame(firstLayer.InferenceConfig, secondLayer.InferenceConfig);
         }
 
         [TestMethod]
@@ -86,12 +133,19 @@ namespace BitNetSharp.Tests
         {
             using var model = TestModelFactory.LoadModel();
             var embeddingLayer = new BitNetSharp.Layers.EmbeddingLayer(model);
-            var context = TestModelFactory.CreateInferenceContext(model, token: 0);
-            float[] input = embeddingLayer.Forward(context);
+            var context = TestModelFactory.CreateSession(model, token: 0);
+            embeddingLayer.Init();
+            embeddingLayer.Forward(context);
+            float[] input = context.Embedding!;
             var normTensor = model.GetLayer(0).AttentionNorm;
-            var layer = new BitNetSharp.Layers.RmsNormLayer(model, normTensor);
+            var layer = new BitNetSharp.Layers.RmsNormLayer(
+                model,
+                normTensor,
+                inferenceConfig: new BitNetSharp.Layers.InferenceConfig(BitNetSharp.Layers.InferenceBackend.CPU, 1));
 
-            float[] actual = layer.Forward(input);
+            layer.Init();
+            layer.Forward(context);
+            float[] actual = context.RmsNorm!;
             float[] weights = ReadTensorValues(model, normTensor);
             float[] expected = ApplyManualRmsNorm(input, weights, model.Config!.AttentionLayerNormRmsEpsilon);
 
@@ -104,44 +158,65 @@ namespace BitNetSharp.Tests
         {
             using var model = TestModelFactory.LoadModel();
             var normTensor = model.GetLayer(0).AttentionNorm;
-            var layer = new BitNetSharp.Layers.RmsNormLayer(model, normTensor);
+            var layer = new BitNetSharp.Layers.RmsNormLayer(
+                model,
+                normTensor,
+                inferenceConfig: new BitNetSharp.Layers.InferenceConfig(BitNetSharp.Layers.InferenceBackend.CPU, 1));
+            var context = TestModelFactory.CreateSession(model, token: 0);
+            context.Embedding = input.ToArray();
 
-            float[] actualValues = layer.Forward(input);
+            layer.Init();
+            layer.Forward(context);
+            float[] actualValues = context.RmsNorm!;
 
-            Assert.AreEqual(expectedValues.Length, actualValues.Length, caseName);
+            Assert.HasCount(expectedValues.Length, actualValues, caseName);
             AssertFloatArraysAreClose(expectedValues, actualValues, 1e-6f);
         }
 
         [TestMethod]
         [DynamicData(nameof(GetRmsNormCases))]
-        public void RmsNorm_TensorBackendMatchesBaseline(string caseName, float[] input, float[] expectedValues)
+        public void RmsNorm_BaselineMatch_Tensor(string caseName, float[] input, float[] expectedValues)
         {
             using var model = TestModelFactory.LoadModel();
             var normTensor = model.GetLayer(0).AttentionNorm;
-            var layer = new BitNetSharp.Layers.RmsNormLayer(model, normTensor, BitNetSharp.Layers.RmsNormBackend.Tensor);
+            var layer = new BitNetSharp.Layers.RmsNormLayer(
+                model,
+                normTensor,
+                inferenceConfig: new BitNetSharp.Layers.InferenceConfig(BitNetSharp.Layers.InferenceBackend.Tensor, 1));
+            var context = TestModelFactory.CreateSession(model, token: 0);
+            context.Embedding = input.ToArray();
 
-            float[] actualValues = layer.Forward(input);
+            layer.Init();
+            layer.Forward(context);
+            float[] actualValues = context.RmsNorm!;
 
-            Assert.AreEqual(expectedValues.Length, actualValues.Length, caseName);
+            Assert.HasCount(expectedValues.Length, actualValues, caseName);
             AssertFloatArraysAreClose(expectedValues, actualValues, 1e-6f);
         }
 
         [TestMethod]
         [DynamicData(nameof(GetRmsNormCases))]
-        public void RmsNorm_SimdBackendMatchesBaseline(string caseName, float[] input, float[] expectedValues)
+        public void RmsNorm_BaselineMatch_SIMD(string caseName, float[] input, float[] expectedValues)
         {
             using var model = TestModelFactory.LoadModel();
             var normTensor = model.GetLayer(0).AttentionNorm;
-            var layer = new BitNetSharp.Layers.RmsNormLayer(model, normTensor, BitNetSharp.Layers.RmsNormBackend.SIMD);
+            var layer = new BitNetSharp.Layers.RmsNormLayer(
+                model,
+                normTensor,
+                inferenceConfig: new BitNetSharp.Layers.InferenceConfig(BitNetSharp.Layers.InferenceBackend.SIMD, 1));
+            var context = TestModelFactory.CreateSession(model, token: 0);
+            context.Embedding = input.ToArray();
 
             if (!Avx.IsSupported || !Avx2.IsSupported)
             {
                 Assert.Inconclusive("AVX2 is not supported on the current machine.");
             }
 
-            float[] actualValues = layer.Forward(input);
+            layer.Init();
+            layer.Forward(context);
+            float[] actualValues = context.RmsNorm!;
 
-            Assert.AreEqual(expectedValues.Length, actualValues.Length, caseName);
+            Assert.HasCount(expectedValues.Length, actualValues, caseName);
             AssertFloatArraysAreClose(expectedValues, actualValues, 1e-6f);
         }
 
@@ -150,57 +225,113 @@ namespace BitNetSharp.Tests
         {
             using var model = TestModelFactory.LoadModel();
             var embeddingLayer = new BitNetSharp.Layers.EmbeddingLayer(model);
-            var context = TestModelFactory.CreateInferenceContext(model, token: 0);
-            float[] input = embeddingLayer.Forward(context);
+            var context = TestModelFactory.CreateSession(model, token: 0);
+            embeddingLayer.Init();
+            embeddingLayer.Forward(context);
             var normTensor = model.GetLayer(0).AttentionNorm;
-            var uncachedLayer = new BitNetSharp.Layers.RmsNormLayer(model, normTensor);
-            var cachedLayer = new BitNetSharp.Layers.RmsNormLayer(model, normTensor, enableCache: true);
+            var uncachedLayer = new BitNetSharp.Layers.RmsNormLayer(
+                model,
+                normTensor,
+                inferenceConfig: new BitNetSharp.Layers.InferenceConfig(BitNetSharp.Layers.InferenceBackend.CPU, 1));
+            var cachedLayer = new BitNetSharp.Layers.RmsNormLayer(
+                model,
+                normTensor,
+                enableCache: true,
+                inferenceConfig: new BitNetSharp.Layers.InferenceConfig(BitNetSharp.Layers.InferenceBackend.CPU, 1));
+            var cachedContext = TestModelFactory.CreateSession(model, token: 0);
+            cachedContext.Embedding = context.Embedding!.ToArray();
 
-            float[] uncached = uncachedLayer.Forward(input);
-            float[] cached = cachedLayer.Forward(input);
+            uncachedLayer.Init();
+            cachedLayer.Init();
+            uncachedLayer.Forward(context);
+            cachedLayer.Forward(cachedContext);
+            float[] uncached = context.RmsNorm!;
+            float[] cached = cachedContext.RmsNorm!;
 
             Assert.IsTrue(cachedLayer.EnableCache);
             AssertFloatArraysAreClose(uncached, cached, 0f);
         }
 
         [TestMethod]
-        public void RmsNorm_TensorBackendMatchesCpuStandard()
+        public void RmsNorm_CPU_Matches_Tensor()
         {
             using var model = TestModelFactory.LoadModel();
             var normTensor = model.GetLayer(0).AttentionNorm;
             var embeddingLayer = new BitNetSharp.Layers.EmbeddingLayer(model);
-            var context = TestModelFactory.CreateInferenceContext(model, token: 0);
-            float[] input = embeddingLayer.Forward(context);
-            var cpuLayer = new BitNetSharp.Layers.RmsNormLayer(model, normTensor);
-            var tensorLayer = new BitNetSharp.Layers.RmsNormLayer(model, normTensor, BitNetSharp.Layers.RmsNormBackend.Tensor);
+            var context = TestModelFactory.CreateSession(model, token: 0);
+            embeddingLayer.Init();
+            embeddingLayer.Forward(context);
+            var cpuLayer = new BitNetSharp.Layers.RmsNormLayer(
+                model,
+                normTensor,
+                inferenceConfig: new BitNetSharp.Layers.InferenceConfig(BitNetSharp.Layers.InferenceBackend.CPU, 1));
+            var tensorLayer = new BitNetSharp.Layers.RmsNormLayer(
+                model,
+                normTensor,
+                inferenceConfig: new BitNetSharp.Layers.InferenceConfig(BitNetSharp.Layers.InferenceBackend.Tensor, 1));
+            var tensorContext = TestModelFactory.CreateSession(model, token: 0);
+            tensorContext.Embedding = context.Embedding!.ToArray();
 
-            float[] expected = cpuLayer.Forward(input);
-            float[] actual = tensorLayer.Forward(input);
+            cpuLayer.Init();
+            tensorLayer.Init();
+            cpuLayer.Forward(context);
+            tensorLayer.Forward(tensorContext);
+            float[] expected = context.RmsNorm!;
+            float[] actual = tensorContext.RmsNorm!;
 
             AssertFloatArraysAreClose(expected, actual, 1e-6f);
         }
 
         [TestMethod]
-        public void RmsNorm_SimdBackendMatchesCpuStandard()
+        public void RmsNorm_CPU_Matchs_SIMD()
         {
             using var model = TestModelFactory.LoadModel();
             var normTensor = model.GetLayer(0).AttentionNorm;
             var embeddingLayer = new BitNetSharp.Layers.EmbeddingLayer(model);
-            var context = TestModelFactory.CreateInferenceContext(model, token: 0);
-            float[] input = embeddingLayer.Forward(context);
-            var cpuLayer = new BitNetSharp.Layers.RmsNormLayer(model, normTensor);
-            var simdLayer = new BitNetSharp.Layers.RmsNormLayer(model, normTensor, BitNetSharp.Layers.RmsNormBackend.SIMD);
+            var context = TestModelFactory.CreateSession(model, token: 0);
+            embeddingLayer.Init();
+            embeddingLayer.Forward(context);
+            var cpuLayer = new BitNetSharp.Layers.RmsNormLayer(
+                model,
+                normTensor,
+                inferenceConfig: new BitNetSharp.Layers.InferenceConfig(BitNetSharp.Layers.InferenceBackend.CPU, 1));
+            var simdLayer = new BitNetSharp.Layers.RmsNormLayer(
+                model,
+                normTensor,
+                inferenceConfig: new BitNetSharp.Layers.InferenceConfig(BitNetSharp.Layers.InferenceBackend.SIMD, 1));
+            var simdContext = TestModelFactory.CreateSession(model, token: 0);
+            simdContext.Embedding = context.Embedding!.ToArray();
+
+            cpuLayer.Init();
+            simdLayer.Init();
 
             if (!Avx.IsSupported || !Avx2.IsSupported)
             {
-                Assert.ThrowsExactly<NotSupportedException>(() => simdLayer.Forward(input));
+                Assert.ThrowsExactly<NotSupportedException>(() => simdLayer.Forward(simdContext));
                 return;
             }
 
-            float[] expected = cpuLayer.Forward(input);
-            float[] actual = simdLayer.Forward(input);
+            cpuLayer.Forward(context);
+            simdLayer.Forward(simdContext);
+            float[] expected = context.RmsNorm!;
+            float[] actual = simdContext.RmsNorm!;
 
             AssertFloatArraysAreClose(expected, actual, 1e-6f);
+        }
+
+        [TestMethod]
+        public void RmsNorm_ForwardWithoutInit_Throws()
+        {
+            using var model = TestModelFactory.LoadModel();
+            var normTensor = model.GetLayer(0).AttentionNorm;
+            var layer = new BitNetSharp.Layers.RmsNormLayer(
+                model,
+                normTensor,
+                inferenceConfig: new BitNetSharp.Layers.InferenceConfig(BitNetSharp.Layers.InferenceBackend.CPU, 1));
+            var context = TestModelFactory.CreateSession(model, token: 0);
+            context.Embedding = new float[(int)model.Config!.EmbeddingLength];
+
+            Assert.ThrowsExactly<InvalidOperationException>(() => layer.Forward(context));
         }
 
         public static IEnumerable<object[]> GetEmbeddingCases()
@@ -273,7 +404,7 @@ namespace BitNetSharp.Tests
 
         private static void AssertFloatArraysAreClose(IReadOnlyList<float> expected, IReadOnlyList<float> actual, float delta)
         {
-            Assert.AreEqual(expected.Count, actual.Count);
+            Assert.HasCount(expected.Count, actual);
             for (int index = 0; index < expected.Count; index++)
             {
                 Assert.AreEqual(expected[index], actual[index], delta, $"Mismatch at index {index}.");

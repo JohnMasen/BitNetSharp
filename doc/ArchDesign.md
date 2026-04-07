@@ -6,8 +6,8 @@
 
 当前设计原则是：
 
-- 以 `SessionRuntimeContext` 作为统一执行上下文
-- 每个推理步骤只接收一个 `SessionRuntimeContext`
+- 以 `BitNetSession` 作为统一状态载体
+- 每个推理步骤只接收一个 `BitNetSession`
 - 步骤自行从上下文读取输入，并将结果写回上下文
 - 推理流程、模型定义、底层算子三者解耦
 - 优先保证流程清晰和可扩展，再逐步替换热点步骤为 `BitNet` 优化实现
@@ -53,12 +53,18 @@
 
 建议承载内容：
 
-- 创建和复用 `SessionRuntimeContext`
+- 创建和准备 `BitNetSession`
 - 组织顶层推理流水线
 - 控制 `prefill` / `decode` 执行模式
 - 按顺序调度各步骤
 
 建议由 `BitNetRuntime` 作为推理入口。
+
+当前补充约定：
+
+- 现阶段先保持当前 `CPU` 路径的内存管理方式，不提前把额外内存管理职责压到 `BitNetSession`
+- 当前分片逻辑主要服务 `CPU` 计算，不强行抽象为适配 `GPU` 的统一模型
+- 后续如引入 `GPU` 推理，再一并调整 `BitNetRuntime` 与 `BitNetSession` 的职责边界，并视需要引入独立内存管理器
 
 ### 2.4 Step 层
 
@@ -66,7 +72,7 @@
 
 每个步骤：
 
-- 只接收 `SessionRuntimeContext`
+- 只接收 `BitNetSession`
 - 从上下文读取所需输入
 - 将自己的结果写回上下文
 - 不直接依赖调用者传递零散参数
@@ -91,6 +97,21 @@
 - 其他矩阵向量或矩阵矩阵计算
 
 `BitNet` 的低比特特性主要放在这一层，而不是放在步骤调度层。
+
+### 2.6 Layer 推理配置约定
+
+当前各个 layer 构造函数统一接收可选的 `InferenceConfig`。
+
+- `InferenceConfig` 只包含 `Backend` 与 `ThreadCount`
+- 该配置会以只读属性形式暴露在 layer 上
+- 如果构造时传入 `null`，layer 会按各自默认策略创建一个新的默认配置实例
+- 运行时始终读取该只读属性，不再额外推断计算后端或线程数
+
+当前默认策略：
+
+- `EmbeddingLayer`：`CPU` + 单线程
+- `RmsNormLayer`：`SIMD` + 单线程
+- `QKVProjectionLayer`：`SIMD` + 自动线程数
 
 ---
 
@@ -137,14 +158,14 @@
 建议负责：
 
 - 将 `BitNetModel` 和 `BitNetSession` 绑定到一次执行中
-- 创建 `SessionRuntimeContext`
+- 初始化本轮执行所需的 `BitNetSession` 状态
 - 驱动推理步骤树
 - 区分 `prefill` 与 `decode`
 - 控制一轮或多轮 token 生成
 
-### 3.4 `SessionRuntimeContext`
+### 3.4 `BitNetSession`（执行期视角）
 
-定位为单次执行期的统一数据交换中心。
+定位为当前实现中的统一数据交换中心。
 
 这是整个设计的核心。
 
@@ -152,14 +173,14 @@
 
 - 所有步骤共享同一个上下文实例
 - 步骤之间不直接传递零散参数
-- 上下文中显式区分长期状态与短期状态
+- 在同一个 `BitNetSession` 中显式区分长期状态与短期状态
 - 关键槽位尽量强类型化，避免完全依赖字符串字典
 
 ---
 
-## 4. `SessionRuntimeContext` 结构设计
+## 4. `BitNetSession` 结构设计
 
-建议将 `SessionRuntimeContext` 分为以下区域。
+建议将 `BitNetSession` 分为以下区域。
 
 ### 4.1 执行元信息区
 
@@ -253,8 +274,8 @@
 
 每个步骤都遵循同一原则：
 
-- 输入来自 `SessionRuntimeContext`
-- 输出写回 `SessionRuntimeContext`
+- 输入来自 `BitNetSession`
+- 输出写回 `BitNetSession`
 - 步骤本身只关注自己的职责范围
 
 ### 5.2 步骤元信息
@@ -274,7 +295,7 @@
 
 示例：
 
-- `QkvProjectionStep`
+- `QKVProjectionStep`
 - `AttentionSoftmaxStep`
 - `MlpActivationStep`
 
@@ -450,7 +471,7 @@
 
 - `AttentionInput`
 
-### 8.2 `QkvProjectionStep`
+### 8.2 `QKVProjectionStep`
 
 职责：
 
@@ -471,7 +492,10 @@
 备注：
 
 - 这是最重要的 `BitNet` 热点步骤之一
-- 内部可以调用普通线性实现或 `BitLinear` 实现
+- `BitNet-B1.58` 的 `Q / K / V` 投影不是普通 `float matmul`
+- 对当前 `GGUF` 模型，`Wq / Wk / Wv` 是 `I2_S` 打包权重，运行时路径等价于 `BitNetLinear(attn_norm, wq/wk/wv)`
+- 对拍时不要先把整张权重反量化成 `float` 再做普通矩阵乘法，这会稳定偏离 runtime
+- 若模型存在对应 bias，应在各自投影输出后追加 `bq / bk / bv`
 
 ### 8.3 `PositionApplyStep`
 
@@ -489,6 +513,12 @@
 
 - `QPositioned`
 - `KPositioned`
+
+备注：
+
+- `RoPE` 只作用于 `Q` 和 `KCurrent`
+- `VCurrent` 不做 `RoPE`
+- 对当前调试 dump，`Qcur / Kcur` 是 `RoPE` 之前的运行时节点，不能直接拿去和 `RoPE` 之后的实现结果对拍
 
 ### 8.4 `KvCacheWriteStep`
 
@@ -509,6 +539,13 @@
 - 更新后的 `K Cache`
 - 更新后的 `V Cache`
 - cache 有效长度
+
+备注：
+
+- 当前 `BitNet-B1.58` 路径里，`V Cache` 的存储类型会影响后续 attention 数值
+- 单 token调试时，runtime 看到的 `attn_ctx` 不是原始 `VCurrent(F32)` 的直接重复，而是写入 cache 后再读出的值
+- 对当前模型可近似记为：`VCacheValue = fp16_to_fp32(fp32_to_fp16(VCurrent))`
+- 如果实现里直接复用原始 `VCurrent(F32)`，`AttentionContext`、`attn_sub_norm` 和 `attn_o_out` 都会出现小但稳定的偏差
 
 ### 8.5 `AttentionScoreStep`
 
@@ -560,6 +597,19 @@
 
 - `AttentionContext`
 
+备注：
+
+- 对当前模型，`AttentionContext` 的逻辑 shape 应理解为 `[n_head, head_dim]`
+- `VCurrent` 的逻辑 shape 应理解为 `[n_head_kv, head_dim]`
+- `GQA` 映射规则是连续分组，而不是取模
+- 对当前模型：`n_head = 20`、`n_head_kv = 5`、`n_gqa = 4`
+- 因此映射规则为 `kv_head = q_head / n_gqa`
+- 即 `0..3 -> 0`、`4..7 -> 1`、`8..11 -> 2`、`12..15 -> 3`、`16..19 -> 4`
+- flatten 为一维向量时应保持 `head-major` 顺序：`flat_index = q_head * head_dim + dim`
+- 不要误用 `dim-major` 展平，也不要误用 `kv_head = q_head % n_head_kv`
+- 在 `单 token + pos = 0 + clear KV cache` 的调试场景下，softmax 权重退化为 `1`
+- 因此当前模型的单 token `AttentionContext` 应与 `repeat_gqa(fp16_roundtrip(VCurrent))` 对齐
+
 ### 8.8 `AttentionOutputProjectionStep`
 
 职责：
@@ -578,6 +628,13 @@
 备注：
 
 - 这是另一个重要的 `BitNet` 热点步骤
+- `AttentionContext` 在当前 `BitNet-B1.58` 模型里不会直接进入 `Wo`
+- 正确顺序是：`AttentionContext -> attn_sub_norm -> Wo -> optional wo_scale -> optional bo`
+- `attn_sub_norm` 是 attention 后的 `RMSNorm`，这一层是 `BitNet-B1.58` 与常见实现相比最容易漏掉的差异之一
+- 对当前模型的第一层调试结果，`attn_sub_norm` 是对整个 `2560` 维向量做一次 `RMSNorm`，不是按 head 分段归一化
+- 对当前 `ggml-model-i2_s.gguf`，`GGUF` 中不存在额外的 `attn_output.scale` 和 `attn_output.bias`
+- 因此当前模型的 `attn_o_out` 仅包含 `BitNetLinear(attn_sub_norm, attn_output.weight)`
+- `attn_output.weight` 尾部自带的那个 `float scale` 只是 `I2_S` 权重的打包量化 scale，不是额外的 `wo_scale`
 
 ### 8.9 `AttentionResidualStep`
 
@@ -597,6 +654,58 @@
 设计建议：
 
 - 直接回写主 `Hidden` 槽位，减少中间结果残留
+
+### 8.10 `BitNet-B1.58` Attention 实现说明与避坑
+
+下面这条链路是当前仓库实现 `BitNet-B1.58` attention 时应优先对齐的 runtime 语义：
+
+```text
+inpL
+  -> attn_norm
+  -> Qcur / Kcur / Vcur
+  -> RoPE(Qcur / Kcur)
+  -> KV cache write
+  -> attention core
+  -> attn_ctx
+  -> attn_sub_norm
+  -> attn_output.weight
+  -> attn_o_out
+  -> residual add
+```
+
+关键约束：
+
+- `Attention` 的直接输入是 `QKVProjection` 的输出，不是 `RMSNorm` 的输出
+- `RMSNorm` 只是 `QKVProjection` 的输入准备步骤
+- `Q / K / V / Wo` 都应走 `BitNet` 专用量化线性路径，而不是普通浮点矩阵乘法
+- `Q / K` 会做 `RoPE`，`V` 不做 `RoPE`
+- attention 后必须有 `attn_sub_norm`
+- 之后才进入 `Wo`
+
+对当前仓库最容易踩错的点：
+
+- 把 dump 出来的 `Qcur / Kcur` 当成 `RoPE` 之后的值
+- 在单 token 场景下误以为 `Q / K` 没参与计算就是实现错误
+- 直接把原始 `VCurrent(F32)` 做 `GQA` 重复，而忘记 `KV cache` 的 `F16 round-trip`
+- 把 `attn_sub_norm` 按 head 分段归一化，而不是按当前 runtime 的整条 `2560` 维向量归一化
+- 把 `attn_output.weight` 尾部量化 scale 误认为额外的 `wo_scale`
+
+单 token runtime 对拍建议：
+
+- 仅在 `单 token + pos = 0 + clear KV cache` 条件下做第一步对拍
+- 推荐按以下顺序定位偏差：
+  - `attn_norm`
+  - `Qcur / Kcur / Vcur`（注意这里是 `RoPE` 前）
+  - `attn_ctx`
+  - `attn_sub_norm`
+  - `attn_o_out`
+- 如果 `attn_sub_norm` 只有极小误差，但 `attn_o_out` 误差明显放大，优先检查进入 `Wo` 前的激活量化边界，而不要先怀疑 `Wo` 本身
+
+当前仓库已经验证过的一条重要经验：
+
+- `attn_sub_norm` 的微小偏差会在 `Wo` 前的激活量化阶段翻转少量量化码
+- 一旦量化码翻转，`attn_o_out` 的误差会被明显放大
+- 因此 attention 调试时，必须先把 `attn_ctx` 与 `attn_sub_norm` 压到足够接近 runtime，再看输出投影
 
 ---
 
@@ -716,7 +825,7 @@
     - `LayerPipelineStep[0]`
       - `AttentionBlockStep`
         - `AttentionInputNormStep`
-        - `QkvProjectionStep`
+        - `QKVProjectionStep`
         - `PositionApplyStep`
         - `KvCacheWriteStep`
         - `AttentionScoreStep`
@@ -747,12 +856,12 @@
 建议做法：
 
 - 步骤名称和职责保持一致
-- 具体行为由 `SessionRuntimeContext.Mode` 决定
+- 具体行为由 `BitNetSession` 上的模式字段决定
 - 每个步骤内部根据模式选择不同策略
 
 例如：
 
-### `QkvProjectionStep`
+### `QKVProjectionStep`
 
 - `Prefill`：处理一个 token 段
 - `Decode`：仅处理最新 token
@@ -777,7 +886,7 @@
 
 因此建议：
 
-- `QkvProjectionStep` 仍然只是投影步骤
+- `QKVProjectionStep` 仍然只是投影步骤
 - `MlpUpProjectionStep` 仍然只是投影步骤
 - `AttentionOutputProjectionStep` 仍然只是投影步骤
 - `MlpDownProjectionStep` 仍然只是投影步骤
@@ -806,7 +915,7 @@
 
 目标：
 
-- `SessionRuntimeContext` 能完整流转
+- `BitNetSession` 能完整流转
 - 所有步骤的读写关系清晰
 - 先保证正确性
 
@@ -820,7 +929,7 @@
 
 优先优化：
 
-- `QkvProjectionStep`
+- `QKVProjectionStep`
 - `AttentionOutputProjectionStep`
 - `MlpUpProjectionStep`
 - `MlpGateProjectionStep`
@@ -842,7 +951,7 @@
 
 ## 14. 风险与约束
 
-### 14.1 `SessionRuntimeContext` 过度膨胀
+### 14.1 `BitNetSession` 过度膨胀
 
 风险：
 
@@ -912,7 +1021,7 @@
 
 本设计的核心原则可归纳为一句话：
 
-`SessionRuntimeContext` 负责持有状态，`Step` 负责消费状态并产出状态，`BitNetRuntime` 负责按顺序驱动 `Step`，`Kernel` 负责执行真正的数值计算。
+`BitNetSession` 负责持有状态，`Step` 负责消费状态并产出状态，`BitNetRuntime` 负责按顺序驱动 `Step`，`Kernel` 负责执行真正的数值计算。
 
 这套结构适合 `BitNetSharp` 的早期演进路径：
 

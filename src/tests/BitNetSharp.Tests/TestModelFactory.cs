@@ -17,11 +17,11 @@ namespace BitNetSharp.Tests
             return model;
         }
 
-        internal static global::BitNetSharp.InferenceContext CreateInferenceContext(Models.BitNetModel model, int token)
+        internal static global::BitNetSharp.BitNetSession CreateSession(Models.BitNetModel model, int token)
         {
             ArgumentNullException.ThrowIfNull(model);
 
-            return new global::BitNetSharp.InferenceContext(model)
+            return new global::BitNetSharp.BitNetSession(model)
             {
                 Tokens = [token],
                 CurrentToken = token,

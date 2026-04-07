@@ -8,6 +8,8 @@ namespace BitNetSharp.Models
         BitNetTensorInfo AttentionKeyWeight,
         BitNetTensorInfo AttentionValueWeight,
         BitNetTensorInfo AttentionOutputWeight,
+        BitNetTensorInfo? AttentionOutputScale,
+        BitNetTensorInfo? AttentionOutputBias,
         BitNetTensorInfo FeedForwardNorm,
         BitNetTensorInfo FeedForwardSubNorm,
         BitNetTensorInfo FeedForwardGateWeight,
