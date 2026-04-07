@@ -1,5 +1,6 @@
 ﻿using GGUFSharp;
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -10,6 +11,9 @@ namespace BitNetSharp.Models
     public class BitNetModel : IDisposable
     {
         private bool disposed;
+        private GGUFFile? loadedFile;
+        private GGUFReader? loadedReader;
+        private IReadOnlyDictionary<string, GGUFTensorInfo> rawTensorIndex = new Dictionary<string, GGUFTensorInfo>(StringComparer.Ordinal);
 
         public BitNetModelConfig? Config { get; private set; }
 
@@ -51,14 +55,54 @@ namespace BitNetSharp.Models
             BitNetMetadataParser metadataParser = options?.MetadataParser ?? ParseDefaultMetadata;
             BitNetMetadataParseResult metadata = metadataParser(file) ?? throw new InvalidOperationException("Metadata parser returned no result.");
 
+            loadedReader = reader;
+            loadedFile = file;
+
             Config = metadata.ModelConfig ?? throw new InvalidOperationException("Metadata parser returned no model configuration.");
             TokenizerConfig = metadata.TokenizerConfig ?? throw new InvalidOperationException("Metadata parser returned no tokenizer configuration.");
             Tokenizer = BitNetTokenizerFactory.Create(TokenizerConfig);
 
             var tensorIndex = BitNetTensorIndexBuilder.Create(file.TensorInfos);
             TensorIndex = tensorIndex;
+            rawTensorIndex = file.TensorInfos.ToDictionary(tensor => tensor.Name, StringComparer.Ordinal);
             GlobalTensors = BitNetTensorIndexBuilder.CreateGlobalTensors(tensorIndex);
             Layers = BitNetLayerBuilder.Create(tensorIndex, checked((int)Config.BlockCount));
+        }
+
+        /// <summary>
+        /// Reads the raw byte payload of a tensor from the loaded GGUF file.
+        /// </summary>
+        public IMemoryOwner<byte> ReadTensorData(string tensorName)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+
+            if (string.IsNullOrWhiteSpace(tensorName))
+            {
+                throw new ArgumentException("Tensor name must not be empty.", nameof(tensorName));
+            }
+
+            if (loadedFile is null || loadedReader is null)
+            {
+                throw new InvalidOperationException("The model must be loaded before tensor data can be read.");
+            }
+
+            if (!rawTensorIndex.TryGetValue(tensorName, out GGUFTensorInfo? tensorInfo))
+            {
+                throw new InvalidOperationException($"Required tensor '{tensorName}' was not found.");
+            }
+
+            return loadedReader.ReadTensorData(loadedFile, tensorInfo);
+        }
+
+        /// <summary>
+        /// Reads the raw byte payload of a tensor from the loaded GGUF file.
+        /// </summary>
+        public IMemoryOwner<byte> ReadTensorData(BitNetTensorInfo tensorInfo)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            ArgumentNullException.ThrowIfNull(tensorInfo);
+
+            return ReadTensorData(tensorInfo.Name);
         }
 
         /// <summary>
@@ -77,6 +121,9 @@ namespace BitNetSharp.Models
             Config = null;
             Layers = [];
             TensorIndex = new Dictionary<string, BitNetTensorInfo>(StringComparer.Ordinal);
+            rawTensorIndex = new Dictionary<string, GGUFTensorInfo>(StringComparer.Ordinal);
+            loadedFile = null;
+            loadedReader = null;
             disposed = true;
             GC.SuppressFinalize(this);
         }

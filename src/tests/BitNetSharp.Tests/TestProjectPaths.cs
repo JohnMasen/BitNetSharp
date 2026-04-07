@@ -20,5 +20,10 @@ namespace BitNetSharp.Tests
             AppContext.BaseDirectory,
             "TestData",
             "standard_tokens.json");
+
+        public static string EmbeddingVectorsPath => Path.Combine(
+            AppContext.BaseDirectory,
+            "TestData",
+            "embedding_vectors.json");
     }
 }

@@ -9,9 +9,15 @@
 - Use a test-project-level GGUF path configuration for tokenizer tests.
 - Use class-level test initialization to load the GGUF model once, reuse it across tests in the class, and release it in class cleanup.
 - Load the GGUF model in shared test initialization and ensure proper release after the test scope ends.
+- Use shorter, clearer test names that are easy to scan at a glance.
+
+## Layer Testing Instructions
+- Keep `EmbeddingLayer` tests in a separate `LayerTests.cs` file.
 
 ## GGUF Metadata Mapping Instructions
 - For GGUF metadata mapping design, keep `LoadOptions` minimal: retain only a metadata parser callback and pass GGUF meta information to a caller-provided parser, allowing that parser to return a structured result instead of using complex per-field schema/default mapping inside `SchemaMapping`.
 - Do not use a factory pattern; put a `SchemaMapping` struct directly on load options.
 - Use the built-in default mapping when `SchemaMapping` is null, and always parse through `SchemaMapping`.
 - Parser implementations must not retain references to `GGUFFile` internally to avoid memory leaks.
+
+- For `EmbeddingLayer`, make embedding reads optionally cached via a configurable `EnableCache` setting instead of re-reading tensor data on every `Forward` call.

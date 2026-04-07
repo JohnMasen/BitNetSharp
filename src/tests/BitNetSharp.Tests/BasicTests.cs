@@ -1,56 +1,51 @@
-﻿using GGUFSharp;
-using System.Linq;
-using System.Runtime.InteropServices;
-using System.Text;
-
-namespace BitNetSharp.Tests
+﻿namespace BitNetSharp.Tests
 {
     [TestClass]
     [DoNotParallelize]
     public sealed class BasicTests
     {
         [TestMethod]
-        public void WhenLoadingModelThenTokenizerIsCreated()
+        public void LoadModel_CreatesTokenizer()
         {
-            using var model = LoadModel();
+            using var model = TestModelFactory.LoadModel();
 
             Assert.IsNotNull(model.Tokenizer);
         }
 
         [TestMethod]
-        public void WhenLoadingModelThenArchitectureNameMatchesMetadata()
+        public void LoadModel_ReadsArchitectureName()
         {
-            using var model = LoadModel();
+            using var model = TestModelFactory.LoadModel();
 
             Assert.AreEqual("bitnet-b1.58", model.Config?.ArchitectureName);
         }
 
         [TestMethod]
-        public void WhenLoadingModelThenLayerCountMatchesBlockCount()
+        public void LoadModel_ReadsLayerCount()
         {
-            using var model = LoadModel();
+            using var model = TestModelFactory.LoadModel();
 
             Assert.HasCount(30, model.Layers);
         }
 
         [TestMethod]
-        public void WhenLoadingModelThenKnownTensorCanBeFound()
+        public void LoadModel_FindsKnownTensor()
         {
-            using var model = LoadModel();
+            using var model = TestModelFactory.LoadModel();
 
             Assert.IsTrue(model.TryGetTensor("blk.0.attn_q.weight", out _));
         }
 
         [TestMethod]
-        public void WhenGettingFirstLayerThenAttentionQueryWeightMatchesExpectedTensorName()
+        public void GetLayer_ReturnsQueryWeightTensor()
         {
-            using var model = LoadModel();
+            using var model = TestModelFactory.LoadModel();
 
             Assert.AreEqual("blk.0.attn_q.weight", model.GetLayer(0).AttentionQueryWeight.Name);
         }
 
         [TestMethod]
-        public void WhenLoadingModelWithCustomMetadataParserThenParsedMetadataIsUsed()
+        public void LoadModel_UsesCustomMetadataParser()
         {
             Models.BitNetMetadataParser parser = file =>
             {
@@ -62,24 +57,10 @@ namespace BitNetSharp.Tests
                 };
             };
 
-            using var model = LoadModel(new Models.BitNetModelLoadOptions { MetadataParser = parser });
+            using var model = TestModelFactory.LoadModel(new Models.BitNetModelLoadOptions { MetadataParser = parser });
 
             Assert.AreEqual("custom-bitnet", model.Config?.ModelName);
         }
 
-        private static Models.BitNetModel LoadModel(Models.BitNetModelLoadOptions? options = null)
-        {
-            Models.BitNetModel model = new Models.BitNetModel();
-            if (options is null)
-            {
-                model.Load(TestProjectPaths.ModelPath);
-            }
-            else
-            {
-                model.Load(TestProjectPaths.ModelPath, options);
-            }
-
-            return model;
-        }
     }
 }
