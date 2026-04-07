@@ -1,16 +1,12 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace BitNetSharp.Core
 {
-    public class MathHelper
+    public partial class MathHelper
     {
         public static  int VectorProcessOne(scoped ReadOnlySpan<sbyte> dataBlock, scoped ReadOnlySpan<byte> weightBlock)
         {
