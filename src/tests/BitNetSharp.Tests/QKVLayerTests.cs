@@ -106,13 +106,11 @@ namespace BitNetSharp.Tests
             cachedLayer.Init();
             uncachedLayer.Forward(uncachedContext);
             cachedLayer.Forward(cachedContext);
-            BitNetSharp.Layers.QKVProjectionOutput uncached = uncachedContext.QKVProjection!;
-            BitNetSharp.Layers.QKVProjectionOutput cached = cachedContext.QKVProjection!;
 
             Assert.IsTrue(cachedLayer.EnableCache);
-            AssertFloatArraysAreClose(uncached.Query, cached.Query, 0f, "query cache");
-            AssertFloatArraysAreClose(uncached.Key, cached.Key, 0f, "key cache");
-            AssertFloatArraysAreClose(uncached.Value, cached.Value, 0f, "value cache");
+            AssertFloatArraysAreClose(uncachedContext.QKVQuery.Span.ToArray(), cachedContext.QKVQuery.Span.ToArray(), 0f, "query cache");
+            AssertFloatArraysAreClose(uncachedContext.QKVKey.Span.ToArray(), cachedContext.QKVKey.Span.ToArray(), 0f, "key cache");
+            AssertFloatArraysAreClose(uncachedContext.QKVValue.Span.ToArray(), cachedContext.QKVValue.Span.ToArray(), 0f, "value cache");
         }
 
         [TestMethod]
@@ -199,11 +197,10 @@ namespace BitNetSharp.Tests
 
             layer.Init();
             layer.Forward(context);
-            BitNetSharp.Layers.QKVProjectionOutput actual = context.QKVProjection!;
 
-            AssertFloatArraysAreClose(testCase.FirstLayerAttnQKV.WQKV.Query.ToArray(), actual.Query, 1e-4f, caseName + " query");
-            AssertFloatArraysAreClose(testCase.FirstLayerAttnQKV.WQKV.Key.ToArray(), actual.Key, 1e-4f, caseName + " key");
-            AssertFloatArraysAreClose(testCase.FirstLayerAttnQKV.WQKV.Value.ToArray(), actual.Value, 1e-4f, caseName + " value");
+            AssertFloatArraysAreClose(testCase.FirstLayerAttnQKV.WQKV.Query.ToArray(), context.QKVQuery.Span.ToArray(), 1e-4f, caseName + " query");
+            AssertFloatArraysAreClose(testCase.FirstLayerAttnQKV.WQKV.Key.ToArray(), context.QKVKey.Span.ToArray(), 1e-4f, caseName + " key");
+            AssertFloatArraysAreClose(testCase.FirstLayerAttnQKV.WQKV.Value.ToArray(), context.QKVValue.Span.ToArray(), 1e-4f, caseName + " value");
         }
 
         [TestMethod]
@@ -332,8 +329,8 @@ namespace BitNetSharp.Tests
             [property: JsonPropertyName("runtime_source")] string RuntimeSource);
 
         internal sealed record PackedQKVValues(
-            [property: JsonPropertyName("qcur")] IReadOnlyList<float> Query,
-            [property: JsonPropertyName("kcur")] IReadOnlyList<float> Key,
-            [property: JsonPropertyName("vcur")] IReadOnlyList<float> Value);
+            [property: JsonPropertyName("qcur")] float[] Query,
+            [property: JsonPropertyName("kcur")] float[] Key,
+            [property: JsonPropertyName("vcur")] float[] Value);
     }
 }

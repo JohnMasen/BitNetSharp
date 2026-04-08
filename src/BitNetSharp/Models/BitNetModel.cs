@@ -95,6 +95,20 @@ namespace BitNetSharp.Models
         }
 
         /// <summary>
+        /// Reads the raw byte payload of a tensor from the loaded GGUF file directly into a managed session buffer.
+        /// </summary>
+        public Memory<byte> ReadTensorData(string tensorName, BitNetMemoryManager memoryManager, Guid sessionId, string key)
+        {
+            ArgumentNullException.ThrowIfNull(memoryManager);
+            ArgumentException.ThrowIfNullOrWhiteSpace(key);
+
+            using IMemoryOwner<byte> tensorData = ReadTensorData(tensorName);
+            Memory<byte> buffer = memoryManager.RequestMemory<byte>(sessionId, key, tensorData.Memory.Length);
+            tensorData.Memory.CopyTo(buffer);
+            return buffer;
+        }
+
+        /// <summary>
         /// Reads the raw byte payload of a tensor from the loaded GGUF file.
         /// </summary>
         public IMemoryOwner<byte> ReadTensorData(BitNetTensorInfo tensorInfo)
@@ -103,6 +117,16 @@ namespace BitNetSharp.Models
             ArgumentNullException.ThrowIfNull(tensorInfo);
 
             return ReadTensorData(tensorInfo.Name);
+        }
+
+        /// <summary>
+        /// Reads the raw byte payload of a tensor from the loaded GGUF file directly into a managed session buffer.
+        /// </summary>
+        public Memory<byte> ReadTensorData(BitNetTensorInfo tensorInfo, BitNetMemoryManager memoryManager, Guid sessionId, string key)
+        {
+            ArgumentNullException.ThrowIfNull(tensorInfo);
+
+            return ReadTensorData(tensorInfo.Name, memoryManager, sessionId, key);
         }
 
         /// <summary>

@@ -12,6 +12,11 @@
 - Eliminate `InferenceContext` and migrate its contents into `BitNetSession`, avoiding separate runtime-context abstractions for this area of the repo.
 - For layers in this repo, `Forward` must not be allowed before an explicit `Init` call. `Init` performs internal initialization, currently only eager cache loading.
 - For this repo's transformer pipeline, the attention layer input should be the QKV projection output, not the RMSNorm output directly.
+- For session state in this repo, do not construct `BitNetMemoryManager` inside `BitNetSession`; pass it in during construction so tests can instantiate a shared manager for current development and future code can use unified memory management.
+- For BitNetSession output state in this repo, expose lazy-initialized get-only buffer properties and write into them in place instead of using session buffer request APIs or setter-based copies.
+- Simple scalar values such as `CurrentToken` should be ordinary properties and not be managed by `BitNetMemoryManager`, which should be reserved for large memory blocks.
+- Defer implementing true multi-token KV-cache/runtime work in this repo until after the single-token inference pipeline is fully working end-to-end.
+- Keep `doc/ImplementProgress.md` updated whenever layers or their test files are added or changed.
 
 ## QKV Parallel Work Instructions
 - For QKV parallel work, `ThreadHelper` should support optional block-aligned splitting. Default splitting should not enforce alignment; only SIMD callers should pass an alignment parameter based on the required data byte length.

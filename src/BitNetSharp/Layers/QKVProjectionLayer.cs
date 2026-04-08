@@ -2,6 +2,7 @@ using BitNetSharp.Core;
 using BitNetSharp.Models;
 using GGUFSharp;
 using System;
+using System.Buffers;
 using System.Runtime.InteropServices;
 
 namespace BitNetSharp.Layers
@@ -87,11 +88,15 @@ namespace BitNetSharp.Layers
                 throw new InvalidOperationException("The session was created for a different model instance.");
             }
 
-            float[] input = session.RmsNorm ?? throw new InvalidOperationException("Session does not contain RMSNorm output.");
-            session.QKVProjection = ForwardCore(input);
+            if (!session.HasMemory<float>(BitNetSession.RmsNormKey))
+            {
+                throw new InvalidOperationException("Session does not contain RMSNorm output.");
+            }
+
+            ForwardCore(session.RmsNorm, session.QKVQuery, session.QKVKey, session.QKVValue);
         }
 
-        private QKVProjectionOutput ForwardCore(ReadOnlySpan<float> input)
+        private void ForwardCore(ReadOnlyMemory<float> input, Memory<float> query, Memory<float> key, Memory<float> value)
         {
             if (input.IsEmpty)
             {
@@ -105,49 +110,75 @@ namespace BitNetSharp.Layers
             }
 
             //load packed q / k / v weights from the model or reuse the cached copy
-            PackedProjectionWeights queryWeights = EnableCache ? EnsureCachedQueryWeights() : ReadPackedWeights(queryTensor);
-            PackedProjectionWeights keyWeights = EnableCache ? EnsureCachedKeyWeights() : ReadPackedWeights(keyTensor);
-            PackedProjectionWeights valueWeights = EnableCache ? EnsureCachedValueWeights() : ReadPackedWeights(valueTensor);
-
             //quantize the normalized attention input once, then reuse it across the three projection branches
-            (sbyte[] quantizedValues, float activationScale, _) = MathHelper.QuantizeBitNetActivations(input);
+            using IMemoryOwner<sbyte> quantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(input.Length);
+            Memory<sbyte> quantizedValues = quantizedValuesOwner.Memory[..input.Length];
+            (float activationScale, _) = MathHelper.QuantizeBitNetActivations(input.Span, quantizedValues.Span);
             int queryOutputLength = checked((int)model.Config.EmbeddingLength);
             int keyValueOutputLength = checked((int)model.Config.KeyValueProjectionSize);
             int threads = InferenceConfig.ThreadCount;
-            float[] query = Project(quantizedValues, activationScale, queryWeights, queryOutputLength, threads);
-            float[] key = Project(quantizedValues, activationScale, keyWeights, keyValueOutputLength, threads);
-            float[] value = Project(quantizedValues, activationScale, valueWeights, keyValueOutputLength, threads);
 
-            return new QKVProjectionOutput(query, key, value);
+            if (EnableCache)
+            {
+                Project(quantizedValues, activationScale, EnsureCachedQueryWeights(), queryOutputLength, query, threads);
+                Project(quantizedValues, activationScale, EnsureCachedKeyWeights(), keyValueOutputLength, key, threads);
+                Project(quantizedValues, activationScale, EnsureCachedValueWeights(), keyValueOutputLength, value, threads);
+                return;
+            }
+
+            using (IMemoryOwner<byte> queryTensorData = model.ReadTensorData(queryTensor))
+            {
+                Project(quantizedValues, activationScale, ParsePackedWeights(queryTensorData.Memory, queryTensor, "QKV query"), queryOutputLength, query, threads);
+            }
+
+            using (IMemoryOwner<byte> keyTensorData = model.ReadTensorData(keyTensor))
+            {
+                Project(quantizedValues, activationScale, ParsePackedWeights(keyTensorData.Memory, keyTensor, "QKV key"), keyValueOutputLength, key, threads);
+            }
+
+            using (IMemoryOwner<byte> valueTensorData = model.ReadTensorData(valueTensor))
+            {
+                Project(quantizedValues, activationScale, ParsePackedWeights(valueTensorData.Memory, valueTensor, "QKV value"), keyValueOutputLength, value, threads);
+            }
         }
 
-        private float[] Project(sbyte[] quantizedValues, float activationScale, PackedProjectionWeights weights, int outputLength, int threads)
+        private void Project(ReadOnlyMemory<sbyte> quantizedValues, float activationScale, PackedProjectionWeights weights, int outputLength, Memory<float> output, int threads)
         {
-            return InferenceConfig.Backend switch
+            switch (InferenceConfig.Backend)
             {
-                InferenceBackend.CPU => MathHelper.ProjectBitNetI2Cpu(quantizedValues, activationScale, weights.PackedWeights, outputLength, weights.Scale, threads),
-                InferenceBackend.Tensor => MathHelper.ProjectBitNetI2Tensor(quantizedValues, activationScale, weights.PackedWeights, outputLength, weights.Scale, threads),
-                InferenceBackend.SIMD => MathHelper.ProjectBitNetI2Simd(quantizedValues, activationScale, weights.PackedWeights, outputLength, weights.Scale, threads),
-                _ => throw new NotSupportedException($"QKV backend '{InferenceConfig.Backend}' is not implemented yet."),
-            };
+                case InferenceBackend.CPU:
+                    MathHelper.ProjectBitNetI2Cpu(quantizedValues, activationScale, weights.PackedWeights, outputLength, weights.Scale, output, threads);
+                    return;
+                case InferenceBackend.Tensor:
+                    MathHelper.ProjectBitNetI2Tensor(quantizedValues, activationScale, weights.PackedWeights, outputLength, weights.Scale, output, threads);
+                    return;
+                case InferenceBackend.SIMD:
+                    MathHelper.ProjectBitNetI2Simd(quantizedValues, activationScale, weights.PackedWeights, outputLength, weights.Scale, output, threads);
+                    return;
+                default:
+                    throw new NotSupportedException($"QKV backend '{InferenceConfig.Backend}' is not implemented yet.");
+            }
         }
 
         private PackedProjectionWeights ReadPackedWeights(BitNetTensorInfo tensor)
         {
             using var tensorData = model.ReadTensorData(tensor);
-            ReadOnlySpan<byte> tensorBytes = tensorData.Memory.Span;
+            PackedProjectionWeights weights = ParsePackedWeights(tensorData.Memory, tensor, "Packed QKV");
+            return new PackedProjectionWeights(weights.PackedWeights.ToArray(), weights.Scale);
+        }
 
+        private static PackedProjectionWeights ParsePackedWeights(ReadOnlyMemory<byte> tensorBytes, BitNetTensorInfo tensor, string tensorLabel)
+        {
             //each byte stores four 2-bit ternary weights, and the packed payload is followed by one float scale
             int packedWeightByteCount = checked(((int)tensor.Dimensions[0] * (int)tensor.Dimensions[1]) / 4);
             if (tensorBytes.Length < packedWeightByteCount + sizeof(float))
             {
-                throw new InvalidOperationException($"Packed QKV tensor '{tensor.Name}' is incomplete.");
+                throw new InvalidOperationException($"{tensorLabel} tensor '{tensor.Name}' is incomplete.");
             }
 
-            //split the raw tensor bytes into the packed weight payload and the trailing scale value
-            byte[] packedWeights = tensorBytes[..packedWeightByteCount].ToArray();
-            float scale = MemoryMarshal.Read<float>(tensorBytes.Slice(packedWeightByteCount, sizeof(float)));
-            return new PackedProjectionWeights(packedWeights, scale);
+            return new PackedProjectionWeights(
+                tensorBytes[..packedWeightByteCount],
+                MemoryMarshal.Read<float>(tensorBytes.Span.Slice(packedWeightByteCount, sizeof(float))));
         }
 
         private PackedProjectionWeights EnsureCachedQueryWeights()
@@ -193,6 +224,6 @@ namespace BitNetSharp.Layers
             }
         }
 
-        private sealed record PackedProjectionWeights(byte[] PackedWeights, float Scale);
+        private sealed record PackedProjectionWeights(ReadOnlyMemory<byte> PackedWeights, float Scale);
     }
 }

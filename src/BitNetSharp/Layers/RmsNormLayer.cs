@@ -2,6 +2,7 @@ using BitNetSharp.Core;
 using BitNetSharp.Models;
 using GGUFSharp;
 using System;
+using System.Buffers;
 using System.Runtime.InteropServices;
 
 namespace BitNetSharp.Layers
@@ -68,11 +69,15 @@ namespace BitNetSharp.Layers
                 throw new InvalidOperationException("The session was created for a different model instance.");
             }
 
-            float[] input = session.Embedding ?? throw new InvalidOperationException("Session does not contain embedding output.");
-            session.RmsNorm = ForwardCore(input);
+            if (!session.HasMemory<float>(BitNetSession.EmbeddingKey))
+            {
+                throw new InvalidOperationException("Session does not contain embedding output.");
+            }
+
+            ForwardCore(session.Embedding, session.RmsNorm);
         }
 
-        private float[] ForwardCore(ReadOnlySpan<float> input)
+        private void ForwardCore(ReadOnlyMemory<float> input, Memory<float> output)
         {
             if (input.IsEmpty)
             {
@@ -85,25 +90,38 @@ namespace BitNetSharp.Layers
                 throw new ArgumentException("Input length does not match the model embedding length.", nameof(input));
             }
 
-            ReadOnlySpan<float> normWeights = EnableCache
-                ? EnsureCachedNormWeights()
-                : ReadNormWeights();
-
-            if (normWeights.Length < input.Length)
+            int requiredLength = input.Length;
+            if (EnableCache)
             {
-                throw new InvalidOperationException("RMSNorm weight length does not match the input length.");
+                ExecuteForward(input, EnsureCachedNormWeights().AsMemory(0, requiredLength), output);
+                return;
             }
 
-            normWeights = normWeights[..input.Length];
+            using var tensorData = model.ReadTensorData(normTensor);
+            using IMemoryOwner<float> normWeightsOwner = MemoryPool<float>.Shared.Rent(requiredLength);
+            Memory<float> normWeights = normWeightsOwner.Memory[..requiredLength];
+            FillFloatValues(tensorData.Memory.Span, normTensor.TensorType, normWeights.Span);
+            ExecuteForward(input, normWeights, output);
+        }
+
+        private void ExecuteForward(ReadOnlyMemory<float> input, ReadOnlyMemory<float> normWeights, Memory<float> output)
+        {
             int threads = InferenceConfig.ThreadCount;
 
-            return InferenceConfig.Backend switch
+            switch (InferenceConfig.Backend)
             {
-                InferenceBackend.CPU => MathHelper.ForwardRmsNormCpuStandard(input, normWeights, model.Config.AttentionLayerNormRmsEpsilon, threads),
-                InferenceBackend.SIMD => MathHelper.ForwardRmsNormSimd(input, normWeights, model.Config.AttentionLayerNormRmsEpsilon, threads),
-                InferenceBackend.Tensor => MathHelper.ForwardRmsNormTensor(input, normWeights, model.Config.AttentionLayerNormRmsEpsilon, threads),
-                _ => throw new NotSupportedException($"RMSNorm backend '{InferenceConfig.Backend}' is not implemented yet."),
-            };
+                case InferenceBackend.CPU:
+                    MathHelper.ForwardRmsNormCpuStandard(input, normWeights, model.Config!.AttentionLayerNormRmsEpsilon, output, threads);
+                    return;
+                case InferenceBackend.SIMD:
+                    MathHelper.ForwardRmsNormSimd(input, normWeights, model.Config!.AttentionLayerNormRmsEpsilon, output, threads);
+                    return;
+                case InferenceBackend.Tensor:
+                    MathHelper.ForwardRmsNormTensor(input, normWeights, model.Config!.AttentionLayerNormRmsEpsilon, output, threads);
+                    return;
+                default:
+                    throw new NotSupportedException($"RMSNorm backend '{InferenceConfig.Backend}' is not implemented yet.");
+            }
         }
 
         private void ValidateTensorShape()
@@ -140,6 +158,21 @@ namespace BitNetSharp.Layers
             return cachedNormWeights ??= ReadNormWeights();
         }
 
+        private static void FillFloatValues(ReadOnlySpan<byte> source, GGUFTensorType tensorType, Span<float> destination)
+        {
+            switch (tensorType)
+            {
+                case GGUFTensorType.GGML_TYPE_F32:
+                    MemoryMarshal.Cast<byte, float>(source[..checked(destination.Length * sizeof(float))]).CopyTo(destination);
+                    return;
+                case GGUFTensorType.GGML_TYPE_F16:
+                    ConvertHalfBytesToSingle(source[..checked(destination.Length * sizeof(ushort))], destination);
+                    return;
+                default:
+                    throw new NotSupportedException($"RMSNorm tensor type '{tensorType}' is not supported.");
+            }
+        }
+
         private void EnsureInitialized()
         {
             if (!isInitialized)
@@ -151,12 +184,26 @@ namespace BitNetSharp.Layers
         private static float[] ConvertHalfToSingle(ReadOnlySpan<Half> source)
         {
             float[] values = new float[source.Length];
-            for (int index = 0; index < source.Length; index++)
-            {
-                values[index] = (float)source[index];
-            }
+            ConvertHalfToSingle(source, values);
 
             return values;
+        }
+
+        private static void ConvertHalfToSingle(ReadOnlySpan<Half> source, Span<float> destination)
+        {
+            for (int index = 0; index < source.Length; index++)
+            {
+                destination[index] = (float)source[index];
+            }
+        }
+
+        private static void ConvertHalfBytesToSingle(ReadOnlySpan<byte> source, Span<float> destination)
+        {
+            ReadOnlySpan<ushort> halfBits = MemoryMarshal.Cast<byte, ushort>(source);
+            for (int index = 0; index < halfBits.Length; index++)
+            {
+                destination[index] = (float)BitConverter.UInt16BitsToHalf(halfBits[index]);
+            }
         }
 
         private static int GetElementCount(IReadOnlyList<ulong> dimensions)

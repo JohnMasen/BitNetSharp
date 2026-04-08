@@ -10,7 +10,73 @@ namespace BitNetSharp.Core
     {
         private const float MinimumBitNetQuantizationMax = 0.00001f;
 
-        public static  int VectorProcessOne(scoped ReadOnlySpan<sbyte> dataBlock, scoped ReadOnlySpan<byte> weightBlock)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void ValidateRmsNormDestination(ReadOnlySpan<float> input, ReadOnlySpan<float> normWeights, Span<float> output)
+        {
+            if (input.IsEmpty)
+            {
+                throw new ArgumentException("Input must not be empty.", nameof(input));
+            }
+
+            if (normWeights.Length < input.Length)
+            {
+                throw new ArgumentException("RMSNorm weight length must be at least the input length.", nameof(normWeights));
+            }
+
+            if (output.Length < input.Length)
+            {
+                throw new ArgumentException("Output length must be at least the input length.", nameof(output));
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void ValidateAddDestination(ReadOnlySpan<float> input, ReadOnlySpan<float> addend, Span<float> output)
+        {
+            if (input.IsEmpty)
+            {
+                throw new ArgumentException("Input must not be empty.", nameof(input));
+            }
+
+            if (addend.Length < input.Length)
+            {
+                throw new ArgumentException("Addend length must be at least the input length.", nameof(addend));
+            }
+
+            if (output.Length < input.Length)
+            {
+                throw new ArgumentException("Output length must be at least the input length.", nameof(output));
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void ValidateProjectionDestination(int outputLength, Span<float> output)
+        {
+            if (output.Length < outputLength)
+            {
+                throw new ArgumentException("Output length must be at least the projection output length.", nameof(output));
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void ValidateSoftmaxDestination(ReadOnlySpan<float> input, Span<float> output)
+        {
+            if (input.IsEmpty)
+            {
+                throw new ArgumentException("Input must not be empty.", nameof(input));
+            }
+
+            if (output.Length < input.Length)
+            {
+                throw new ArgumentException("Output length must be at least the input length.", nameof(output));
+            }
+        }
+
+        public static int VectorProcessOne(ReadOnlyMemory<sbyte> dataBlock, ReadOnlyMemory<byte> weightBlock)
+        {
+            return VectorProcessOne(dataBlock.Span, weightBlock.Span);
+        }
+
+        private static int VectorProcessOne(ReadOnlySpan<sbyte> dataBlock, ReadOnlySpan<byte> weightBlock)
         {
             if (dataBlock.Length != 128)
             {
@@ -144,8 +210,13 @@ namespace BitNetSharp.Core
             return (mappedDot / activationScale) * weightScale;
         }
 
-        internal static (sbyte[] QuantizedValues, float ActivationScale, int ActivationSum) QuantizeBitNetActivations(ReadOnlySpan<float> input)
+        internal static (float ActivationScale, int ActivationSum) QuantizeBitNetActivations(ReadOnlySpan<float> input, Span<sbyte> quantizedValues)
         {
+            if (quantizedValues.Length < input.Length)
+            {
+                throw new ArgumentException("Quantized output length must be at least the input length.", nameof(quantizedValues));
+            }
+
             float maxAbs = MinimumBitNetQuantizationMax;
             for (int index = 0; index < input.Length; index++)
             {
@@ -157,7 +228,6 @@ namespace BitNetSharp.Core
             }
 
             float activationScale = 127f / maxAbs;
-            sbyte[] quantizedValues = new sbyte[input.Length];
             int activationSum = 0;
             for (int index = 0; index < input.Length; index++)
             {
@@ -166,6 +236,13 @@ namespace BitNetSharp.Core
                 activationSum += quantizedValue;
             }
 
+            return (activationScale, activationSum);
+        }
+
+        internal static (sbyte[] QuantizedValues, float ActivationScale, int ActivationSum) QuantizeBitNetActivations(ReadOnlySpan<float> input)
+        {
+            sbyte[] quantizedValues = new sbyte[input.Length];
+            (float activationScale, int activationSum) = QuantizeBitNetActivations(input, quantizedValues);
             return (quantizedValues, activationScale, activationSum);
         }
 

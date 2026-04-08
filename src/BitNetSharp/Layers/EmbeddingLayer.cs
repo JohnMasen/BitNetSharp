@@ -93,25 +93,32 @@ namespace BitNetSharp.Layers
                 throw new InvalidOperationException("Embedding tensor dimensions do not match the loaded model configuration.");
             }
 
-            ReadOnlySpan<Half> values = EnableCache
-                ? EnsureCachedEmbeddingValues()
-                : ReadAllEmbeddingValues();
-
+            Memory<float> embedding = session.Embedding;
             int rowOffset = checked(session.CurrentToken * embeddingLength);
-            ReadOnlySpan<Half> embeddingValues = values.Slice(rowOffset, embeddingLength);
-            float[] embedding = new float[embeddingLength];
-            for (int index = 0; index < embeddingValues.Length; index++)
+
+            if (EnableCache)
             {
-                embedding[index] = (float)embeddingValues[index];
+                FillEmbedding(EnsureCachedEmbeddingValues().AsSpan(rowOffset, embeddingLength), embedding.Span);
+                return;
             }
 
-            session.Embedding = embedding;
+            using var tensorData = model.ReadTensorData(tokenEmbedding);
+            ReadOnlySpan<Half> values = MemoryMarshal.Cast<byte, Half>(tensorData.Memory.Span);
+            FillEmbedding(values.Slice(rowOffset, embeddingLength), embedding.Span);
         }
 
         private Half[] ReadAllEmbeddingValues()
         {
             using var tensorData = model.ReadTensorData(tokenEmbedding);
             return MemoryMarshal.Cast<byte, Half>(tensorData.Memory.Span).ToArray();
+        }
+
+        private static void FillEmbedding(ReadOnlySpan<Half> source, Span<float> destination)
+        {
+            for (int index = 0; index < source.Length; index++)
+            {
+                destination[index] = (float)source[index];
+            }
         }
 
         private Half[] EnsureCachedEmbeddingValues()

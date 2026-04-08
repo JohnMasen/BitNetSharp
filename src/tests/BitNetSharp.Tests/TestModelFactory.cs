@@ -2,6 +2,8 @@ namespace BitNetSharp.Tests
 {
     internal static class TestModelFactory
     {
+        private static readonly global::BitNetSharp.BitNetMemoryManager SharedMemoryManager = new();
+
         internal static Models.BitNetModel LoadModel(Models.BitNetModelLoadOptions? options = null)
         {
             Models.BitNetModel model = new Models.BitNetModel();
@@ -21,9 +23,9 @@ namespace BitNetSharp.Tests
         {
             ArgumentNullException.ThrowIfNull(model);
 
-            return new global::BitNetSharp.BitNetSession(model)
+            return new global::BitNetSharp.BitNetSession(model, SharedMemoryManager)
             {
-                Tokens = [token],
+                Tokens = new[] { token },
                 CurrentToken = token,
             };
         }

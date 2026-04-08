@@ -14,6 +14,7 @@ namespace BitNetSharp.Benchmarks;
 [CPUUsageDiagnoser]
 public class QKVProjectionBenchmarks
 {
+    private BitNetMemoryManager? memoryManager;
     private BitNetModel? model;
     private BitNetSession? session;
     private QKVProjectionLayer? cpuSingleThreadLayer;
@@ -26,15 +27,16 @@ public class QKVProjectionBenchmarks
     [GlobalSetup]
     public void GlobalSetup()
     {
+        memoryManager = new BitNetMemoryManager();
         model = new BitNetModel();
         model.Load(BenchmarkProjectPaths.ModelPath);
 
         var layerDefinition = model.GetLayer(0);
         var embeddingLayer = new EmbeddingLayer(model, enableCache: true);
         embeddingLayer.Init();
-        var session = new BitNetSession(model)
+        var session = new BitNetSession(model, memoryManager)
         {
-            Tokens = [0],
+            Tokens = new[] { 0 },
             CurrentToken = 0,
         };
         this.session = session;
@@ -103,6 +105,8 @@ public class QKVProjectionBenchmarks
     [GlobalCleanup]
     public void GlobalCleanup()
     {
+        memoryManager?.Dispose();
+        memoryManager = null;
         model?.Dispose();
         model = null;
         session = null;
@@ -115,31 +119,31 @@ public class QKVProjectionBenchmarks
     }
 
     [Benchmark(Baseline = true)]
-    public QKVProjectionOutput QKV_CPU_SingleThread()
+    public (Memory<float> Query, Memory<float> Key, Memory<float> Value) QKV_CPU_SingleThread()
     {
         return Run(cpuSingleThreadLayer!);
     }
 
     [Benchmark]
-    public QKVProjectionOutput QKV_CPU_MultiThread()
+    public (Memory<float> Query, Memory<float> Key, Memory<float> Value) QKV_CPU_MultiThread()
     {
         return Run(cpuMultiThreadLayer!);
     }
 
     [Benchmark]
-    public QKVProjectionOutput QKV_Tensor_SingleThread()
+    public (Memory<float> Query, Memory<float> Key, Memory<float> Value) QKV_Tensor_SingleThread()
     {
         return Run(tensorSingleThreadLayer!);
     }
 
     [Benchmark]
-    public QKVProjectionOutput QKV_Tensor_MultiThread()
+    public (Memory<float> Query, Memory<float> Key, Memory<float> Value) QKV_Tensor_MultiThread()
     {
         return Run(tensorMultiThreadLayer!);
     }
 
     [Benchmark]
-    public QKVProjectionOutput QKV_SIMD_SingleThread()
+    public (Memory<float> Query, Memory<float> Key, Memory<float> Value) QKV_SIMD_SingleThread()
     {
         if (simdSingleThreadLayer is null)
         {
@@ -150,7 +154,7 @@ public class QKVProjectionBenchmarks
     }
 
     [Benchmark]
-    public QKVProjectionOutput QKV_SIMD_MultiThread()
+    public (Memory<float> Query, Memory<float> Key, Memory<float> Value) QKV_SIMD_MultiThread()
     {
         if (simdMultiThreadLayer is null)
         {
@@ -160,9 +164,9 @@ public class QKVProjectionBenchmarks
         return Run(simdMultiThreadLayer);
     }
 
-    private QKVProjectionOutput Run(QKVProjectionLayer layer)
+    private (Memory<float> Query, Memory<float> Key, Memory<float> Value) Run(QKVProjectionLayer layer)
     {
         layer.Forward(session!);
-        return session!.QKVProjection!;
+        return (session!.QKVQuery, session.QKVKey, session.QKVValue);
     }
 }

@@ -27,6 +27,6 @@ namespace BitNetSharp.Tests
             "..",
             "..",
             "TestData",
-            "layer_vectors.json");
+            "layer_vectors_pure.json");
     }
 }

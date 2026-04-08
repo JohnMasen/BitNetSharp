@@ -23,9 +23,9 @@ namespace BitNetSharp.Tests
 
             layer.Init();
             layer.Forward(context);
-            float[] embedding = context.Embedding!;
+            Memory<float> embedding = context.Embedding;
 
-            Assert.HasCount((int)model.Config!.EmbeddingLength, embedding);
+            Assert.AreEqual((int)model.Config!.EmbeddingLength, embedding.Length);
         }
 
         [TestMethod]
@@ -63,7 +63,7 @@ namespace BitNetSharp.Tests
             uncachedLayer.Forward(uncachedContext);
             cachedLayer.Forward(cachedContext);
 
-            CollectionAssert.AreEqual(uncachedContext.Embedding, cachedContext.Embedding);
+            CollectionAssert.AreEqual(uncachedContext.Embedding.Span.ToArray(), cachedContext.Embedding.Span.ToArray());
             Assert.IsTrue(cachedLayer.EnableCache);
         }
 
@@ -81,15 +81,18 @@ namespace BitNetSharp.Tests
 
         [TestMethod]
         [DynamicData(nameof(GetEmbeddingCases))]
-        public void Embedding_MatchesBaseline(string caseName, int tokenId, float[] expectedValues)
+        public void Embedding_MatchesBaseline(int caseId)
         {
+            LayerVectorCase testCase = GetLayerCase(caseId);
+            string caseName = GetCaseName(testCase);
+            float[] expectedValues = testCase.Dequantized.Values.ToArray();
             using var model = TestModelFactory.LoadModel();
             var layer = new BitNetSharp.Layers.EmbeddingLayer(model);
-            var context = TestModelFactory.CreateSession(model, tokenId);
+            var context = TestModelFactory.CreateSession(model, testCase.TokenId);
 
             layer.Init();
             layer.Forward(context);
-            float[] actualValues = context.Embedding!;
+            float[] actualValues = context.Embedding.Span.ToArray();
 
             Assert.HasCount(expectedValues.Length, actualValues, caseName);
             CollectionAssert.AreEqual(expectedValues, actualValues, caseName);
@@ -136,7 +139,7 @@ namespace BitNetSharp.Tests
             var context = TestModelFactory.CreateSession(model, token: 0);
             embeddingLayer.Init();
             embeddingLayer.Forward(context);
-            float[] input = context.Embedding!;
+            float[] input = context.Embedding.Span.ToArray();
             var normTensor = model.GetLayer(0).AttentionNorm;
             var layer = new BitNetSharp.Layers.RmsNormLayer(
                 model,
@@ -145,7 +148,7 @@ namespace BitNetSharp.Tests
 
             layer.Init();
             layer.Forward(context);
-            float[] actual = context.RmsNorm!;
+            float[] actual = context.RmsNorm.Span.ToArray();
             float[] weights = ReadTensorValues(model, normTensor);
             float[] expected = ApplyManualRmsNorm(input, weights, model.Config!.AttentionLayerNormRmsEpsilon);
 
@@ -154,8 +157,12 @@ namespace BitNetSharp.Tests
 
         [TestMethod]
         [DynamicData(nameof(GetRmsNormCases))]
-        public void RmsNorm_MatchesBaseline(string caseName, float[] input, float[] expectedValues)
+        public void RmsNorm_MatchesBaseline(int caseId)
         {
+            LayerVectorCase testCase = GetLayerCase(caseId);
+            string caseName = GetCaseName(testCase);
+            float[] input = testCase.Dequantized.Values.ToArray();
+            float[] expectedValues = testCase.FirstLayerRmsNorm.Values.ToArray();
             using var model = TestModelFactory.LoadModel();
             var normTensor = model.GetLayer(0).AttentionNorm;
             var layer = new BitNetSharp.Layers.RmsNormLayer(
@@ -167,7 +174,7 @@ namespace BitNetSharp.Tests
 
             layer.Init();
             layer.Forward(context);
-            float[] actualValues = context.RmsNorm!;
+            float[] actualValues = context.RmsNorm.Span.ToArray();
 
             Assert.HasCount(expectedValues.Length, actualValues, caseName);
             AssertFloatArraysAreClose(expectedValues, actualValues, 1e-6f);
@@ -175,8 +182,12 @@ namespace BitNetSharp.Tests
 
         [TestMethod]
         [DynamicData(nameof(GetRmsNormCases))]
-        public void RmsNorm_BaselineMatch_Tensor(string caseName, float[] input, float[] expectedValues)
+        public void RmsNorm_BaselineMatch_Tensor(int caseId)
         {
+            LayerVectorCase testCase = GetLayerCase(caseId);
+            string caseName = GetCaseName(testCase);
+            float[] input = testCase.Dequantized.Values.ToArray();
+            float[] expectedValues = testCase.FirstLayerRmsNorm.Values.ToArray();
             using var model = TestModelFactory.LoadModel();
             var normTensor = model.GetLayer(0).AttentionNorm;
             var layer = new BitNetSharp.Layers.RmsNormLayer(
@@ -188,7 +199,7 @@ namespace BitNetSharp.Tests
 
             layer.Init();
             layer.Forward(context);
-            float[] actualValues = context.RmsNorm!;
+            float[] actualValues = context.RmsNorm.Span.ToArray();
 
             Assert.HasCount(expectedValues.Length, actualValues, caseName);
             AssertFloatArraysAreClose(expectedValues, actualValues, 1e-6f);
@@ -196,8 +207,12 @@ namespace BitNetSharp.Tests
 
         [TestMethod]
         [DynamicData(nameof(GetRmsNormCases))]
-        public void RmsNorm_BaselineMatch_SIMD(string caseName, float[] input, float[] expectedValues)
+        public void RmsNorm_BaselineMatch_SIMD(int caseId)
         {
+            LayerVectorCase testCase = GetLayerCase(caseId);
+            string caseName = GetCaseName(testCase);
+            float[] input = testCase.Dequantized.Values.ToArray();
+            float[] expectedValues = testCase.FirstLayerRmsNorm.Values.ToArray();
             using var model = TestModelFactory.LoadModel();
             var normTensor = model.GetLayer(0).AttentionNorm;
             var layer = new BitNetSharp.Layers.RmsNormLayer(
@@ -214,7 +229,7 @@ namespace BitNetSharp.Tests
 
             layer.Init();
             layer.Forward(context);
-            float[] actualValues = context.RmsNorm!;
+            float[] actualValues = context.RmsNorm.Span.ToArray();
 
             Assert.HasCount(expectedValues.Length, actualValues, caseName);
             AssertFloatArraysAreClose(expectedValues, actualValues, 1e-6f);
@@ -239,14 +254,14 @@ namespace BitNetSharp.Tests
                 enableCache: true,
                 inferenceConfig: new BitNetSharp.Layers.InferenceConfig(BitNetSharp.Layers.InferenceBackend.CPU, 1));
             var cachedContext = TestModelFactory.CreateSession(model, token: 0);
-            cachedContext.Embedding = context.Embedding!.ToArray();
+            cachedContext.Embedding = context.Embedding.Span.ToArray();
 
             uncachedLayer.Init();
             cachedLayer.Init();
             uncachedLayer.Forward(context);
             cachedLayer.Forward(cachedContext);
-            float[] uncached = context.RmsNorm!;
-            float[] cached = cachedContext.RmsNorm!;
+            float[] uncached = context.RmsNorm.Span.ToArray();
+            float[] cached = cachedContext.RmsNorm.Span.ToArray();
 
             Assert.IsTrue(cachedLayer.EnableCache);
             AssertFloatArraysAreClose(uncached, cached, 0f);
@@ -270,14 +285,14 @@ namespace BitNetSharp.Tests
                 normTensor,
                 inferenceConfig: new BitNetSharp.Layers.InferenceConfig(BitNetSharp.Layers.InferenceBackend.Tensor, 1));
             var tensorContext = TestModelFactory.CreateSession(model, token: 0);
-            tensorContext.Embedding = context.Embedding!.ToArray();
+            tensorContext.Embedding = context.Embedding.Span.ToArray();
 
             cpuLayer.Init();
             tensorLayer.Init();
             cpuLayer.Forward(context);
             tensorLayer.Forward(tensorContext);
-            float[] expected = context.RmsNorm!;
-            float[] actual = tensorContext.RmsNorm!;
+            float[] expected = context.RmsNorm.Span.ToArray();
+            float[] actual = tensorContext.RmsNorm.Span.ToArray();
 
             AssertFloatArraysAreClose(expected, actual, 1e-6f);
         }
@@ -300,7 +315,7 @@ namespace BitNetSharp.Tests
                 normTensor,
                 inferenceConfig: new BitNetSharp.Layers.InferenceConfig(BitNetSharp.Layers.InferenceBackend.SIMD, 1));
             var simdContext = TestModelFactory.CreateSession(model, token: 0);
-            simdContext.Embedding = context.Embedding!.ToArray();
+            simdContext.Embedding = context.Embedding.Span.ToArray();
 
             cpuLayer.Init();
             simdLayer.Init();
@@ -313,8 +328,8 @@ namespace BitNetSharp.Tests
 
             cpuLayer.Forward(context);
             simdLayer.Forward(simdContext);
-            float[] expected = context.RmsNorm!;
-            float[] actual = simdContext.RmsNorm!;
+            float[] expected = context.RmsNorm.Span.ToArray();
+            float[] actual = simdContext.RmsNorm.Span.ToArray();
 
             AssertFloatArraysAreClose(expected, actual, 1e-6f);
         }
@@ -336,22 +351,24 @@ namespace BitNetSharp.Tests
 
         public static IEnumerable<object[]> GetEmbeddingCases()
         {
-            return LayerVectorsDocumentCache.Value.TestCases.Select(testCase => new object[]
-            {
-                $"token {testCase.TokenId} ({testCase.TokenText})",
-                testCase.TokenId,
-                testCase.Dequantized.Values.ToArray(),
-            });
+            return Enumerable.Range(0, LayerVectorsDocumentCache.Value.TestCases.Count)
+                .Select(caseId => new object[] { caseId });
         }
 
         public static IEnumerable<object[]> GetRmsNormCases()
         {
-            return LayerVectorsDocumentCache.Value.TestCases.Select(testCase => new object[]
-            {
-                $"token {testCase.TokenId} ({testCase.TokenText})",
-                testCase.Dequantized.Values.ToArray(),
-                testCase.FirstLayerRmsNorm.Values.ToArray(),
-            });
+            return Enumerable.Range(0, LayerVectorsDocumentCache.Value.TestCases.Count)
+                .Select(caseId => new object[] { caseId });
+        }
+
+        private static LayerVectorCase GetLayerCase(int caseId)
+        {
+            return LayerVectorsDocumentCache.Value.TestCases[caseId];
+        }
+
+        private static string GetCaseName(LayerVectorCase testCase)
+        {
+            return $"token {testCase.TokenId} ({testCase.TokenText})";
         }
 
         private static LayerVectorsDocument LoadLayerVectorsDocument()

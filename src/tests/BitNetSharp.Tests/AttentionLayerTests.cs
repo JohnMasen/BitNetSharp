@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.Intrinsics.X86;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -14,7 +15,7 @@ namespace BitNetSharp.Tests
         private static readonly Lazy<AttentionVectorsDocument> AttentionVectorsDocumentCache = new(LoadAttentionVectorsDocument);
 
         [TestMethod]
-        public void Attention_DefaultConfig_CpuAutoThreads()
+        public void Attention_DefaultConfig_SimdAutoThreads()
         {
             using var model = TestModelFactory.LoadModel();
             var layerDefinition = model.GetLayer(0);
@@ -25,7 +26,7 @@ namespace BitNetSharp.Tests
                 layerDefinition.AttentionSubNorm,
                 layerDefinition.AttentionOutputWeight);
 
-            Assert.AreEqual(BitNetSharp.Layers.InferenceBackend.CPU, layer.InferenceConfig.Backend);
+            Assert.AreEqual(BitNetSharp.Layers.InferenceBackend.SIMD, layer.InferenceConfig.Backend);
             Assert.AreEqual(BitNetSharp.Layers.InferenceConfig.AutoThreadCount, layer.InferenceConfig.ThreadCount);
         }
 
@@ -45,7 +46,7 @@ namespace BitNetSharp.Tests
                 layerDefinition.AttentionOutputWeight,
                 inferenceConfig: null);
 
-            Assert.AreEqual(BitNetSharp.Layers.InferenceBackend.CPU, firstLayer.InferenceConfig.Backend);
+            Assert.AreEqual(BitNetSharp.Layers.InferenceBackend.SIMD, firstLayer.InferenceConfig.Backend);
             Assert.AreEqual(BitNetSharp.Layers.InferenceConfig.AutoThreadCount, firstLayer.InferenceConfig.ThreadCount);
             Assert.AreNotSame(firstLayer.InferenceConfig, secondLayer.InferenceConfig);
         }
@@ -76,6 +77,25 @@ namespace BitNetSharp.Tests
             VerifyAttentionOutputMatchesBaselineCpu(caseIndex);
         }
 
+        [TestMethod]
+        public void Attention_CPU_MultiThreadMatchesSingleThread()
+        {
+            VerifyAttentionMultiThreadMatchesSingleThread(BitNetSharp.Layers.InferenceBackend.CPU);
+        }
+
+        [TestMethod]
+        public void Attention_Tensor_MultiThreadMatchesSingleThread()
+        {
+            VerifyAttentionMultiThreadMatchesSingleThread(BitNetSharp.Layers.InferenceBackend.Tensor);
+        }
+
+        [TestMethod]
+        public void Attention_SIMD_MultiThreadMatchesSingleThread()
+        {
+            EnsureAvx2Supported();
+            VerifyAttentionMultiThreadMatchesSingleThread(BitNetSharp.Layers.InferenceBackend.SIMD);
+        }
+
         private static void VerifyAttentionSubNormMatchesBaselineCpu(int caseIndex)
         {
             using var model = TestModelFactory.LoadModel();
@@ -87,13 +107,13 @@ namespace BitNetSharp.Tests
                 layerDefinition.AttentionOutputWeight,
                 inferenceConfig: new BitNetSharp.Layers.InferenceConfig(BitNetSharp.Layers.InferenceBackend.CPU, 1));
             var context = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            context.QKVProjection = CreateProjection(testCase);
+            SetProjection(context, testCase);
 
             layer.Init();
             layer.Forward(context);
-            float[] actual = context.AttentionSubNorm!;
+            Memory<float> actual = context.AttentionSubNorm;
 
-            AssertFloatArraysAreClose(testCase.FirstLayerAttnSubNorm.Values.ToArray(), actual, 1e-6f, $"token {testCase.TokenId} ({testCase.TokenText})");
+            AssertFloatArraysAreClose(testCase.FirstLayerAttnSubNorm.Values.ToArray(), actual.Span.ToArray(), 1e-6f, $"token {testCase.TokenId} ({testCase.TokenText})");
         }
 
         private static void VerifyAttentionOutputMatchesBaselineCpu(int caseIndex)
@@ -107,13 +127,42 @@ namespace BitNetSharp.Tests
                 layerDefinition.AttentionOutputWeight,
                 inferenceConfig: new BitNetSharp.Layers.InferenceConfig(BitNetSharp.Layers.InferenceBackend.CPU, 1));
             var context = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            context.QKVProjection = CreateProjection(testCase);
+            SetProjection(context, testCase);
 
             layer.Init();
             layer.Forward(context);
-            float[] actual = context.AttentionOutput!;
+            Memory<float> actual = context.AttentionOutput;
 
-            AssertFloatArraysAreClose(testCase.FirstLayerAttnOutput.Values.ToArray(), actual, 1e-4f, $"token {testCase.TokenId} ({testCase.TokenText})");
+            AssertFloatArraysAreClose(testCase.FirstLayerAttnOutput.Values.ToArray(), actual.Span.ToArray(), 1e-4f, $"token {testCase.TokenId} ({testCase.TokenText})");
+        }
+
+        private static void VerifyAttentionMultiThreadMatchesSingleThread(BitNetSharp.Layers.InferenceBackend backend)
+        {
+            using var model = TestModelFactory.LoadModel();
+            AttentionCase testCase = GetAttentionCase(0);
+            var layerDefinition = model.GetLayer(0);
+            var singleThreadLayer = new BitNetSharp.Layers.AttentionLayer(
+                model,
+                layerDefinition.AttentionSubNorm,
+                layerDefinition.AttentionOutputWeight,
+                inferenceConfig: new BitNetSharp.Layers.InferenceConfig(backend, 1));
+            var multiThreadLayer = new BitNetSharp.Layers.AttentionLayer(
+                model,
+                layerDefinition.AttentionSubNorm,
+                layerDefinition.AttentionOutputWeight,
+                inferenceConfig: new BitNetSharp.Layers.InferenceConfig(backend, 2));
+            var singleThreadContext = TestModelFactory.CreateSession(model, token: testCase.TokenId);
+            var multiThreadContext = TestModelFactory.CreateSession(model, token: testCase.TokenId);
+            SetProjection(singleThreadContext, testCase);
+            SetProjection(multiThreadContext, testCase);
+
+            singleThreadLayer.Init();
+            multiThreadLayer.Init();
+            singleThreadLayer.Forward(singleThreadContext);
+            multiThreadLayer.Forward(multiThreadContext);
+
+            AssertFloatArraysAreClose(singleThreadContext.AttentionSubNorm.Span.ToArray(), multiThreadContext.AttentionSubNorm.Span.ToArray(), 1e-6f, $"{backend} attention sub-norm threading");
+            AssertFloatArraysAreClose(singleThreadContext.AttentionOutput.Span.ToArray(), multiThreadContext.AttentionOutput.Span.ToArray(), 1e-4f, $"{backend} attention output threading");
         }
 
         [TestMethod]
@@ -134,9 +183,9 @@ namespace BitNetSharp.Tests
                 enableCache: true,
                 inferenceConfig: new BitNetSharp.Layers.InferenceConfig(BitNetSharp.Layers.InferenceBackend.CPU, 1));
             var uncachedContext = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            uncachedContext.QKVProjection = CreateProjection(testCase);
+            SetProjection(uncachedContext, testCase);
             var cachedContext = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            cachedContext.QKVProjection = CreateProjection(testCase);
+            SetProjection(cachedContext, testCase);
 
             uncachedLayer.Init();
             cachedLayer.Init();
@@ -144,8 +193,8 @@ namespace BitNetSharp.Tests
             cachedLayer.Forward(cachedContext);
 
             Assert.IsTrue(cachedLayer.EnableCache);
-            AssertFloatArraysAreClose(uncachedContext.AttentionSubNorm!, cachedContext.AttentionSubNorm!, 0f, "attention sub-norm cache");
-            AssertFloatArraysAreClose(uncachedContext.AttentionOutput!, cachedContext.AttentionOutput!, 0f, "attention output cache");
+            AssertFloatArraysAreClose(uncachedContext.AttentionSubNorm.Span.ToArray(), cachedContext.AttentionSubNorm.Span.ToArray(), 0f, "attention sub-norm cache");
+            AssertFloatArraysAreClose(uncachedContext.AttentionOutput.Span.ToArray(), cachedContext.AttentionOutput.Span.ToArray(), 0f, "attention output cache");
         }
 
         [TestMethod]
@@ -160,7 +209,7 @@ namespace BitNetSharp.Tests
                 layerDefinition.AttentionOutputWeight,
                 inferenceConfig: new BitNetSharp.Layers.InferenceConfig(BitNetSharp.Layers.InferenceBackend.CPU, 1));
             var context = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            context.QKVProjection = CreateProjection(testCase);
+            SetProjection(context, testCase);
 
             Assert.ThrowsExactly<InvalidOperationException>(() => layer.Forward(context));
         }
@@ -181,12 +230,11 @@ namespace BitNetSharp.Tests
             return AttentionVectorsDocumentCache.Value.TestCases[caseIndex];
         }
 
-        private static BitNetSharp.Layers.QKVProjectionOutput CreateProjection(AttentionCase testCase)
+        private static void SetProjection(global::BitNetSharp.BitNetSession session, AttentionCase testCase)
         {
-            return new BitNetSharp.Layers.QKVProjectionOutput(
-                testCase.FirstLayerAttnQKV.WQKV.Query.ToArray(),
-                testCase.FirstLayerAttnQKV.WQKV.Key.ToArray(),
-                testCase.FirstLayerAttnQKV.WQKV.Value.ToArray());
+            session.QKVQuery = testCase.FirstLayerAttnQKV.WQKV.Query.ToArray();
+            session.QKVKey = testCase.FirstLayerAttnQKV.WQKV.Key.ToArray();
+            session.QKVValue = testCase.FirstLayerAttnQKV.WQKV.Value.ToArray();
         }
 
         private static void AssertFloatArraysAreClose(IReadOnlyList<float> expected, IReadOnlyList<float> actual, float delta, string caseName)
@@ -197,6 +245,15 @@ namespace BitNetSharp.Tests
                 Assert.AreEqual(expected[index], actual[index], delta, $"{caseName} mismatch at index {index}.");
             }
         }
+
+        private static void EnsureAvx2Supported()
+        {
+            if (!Avx.IsSupported || !Avx2.IsSupported)
+            {
+                Assert.Inconclusive("AVX2 is not supported on the current machine.");
+            }
+        }
+
 
         internal sealed record AttentionVectorsDocument(
             [property: JsonPropertyName("test_cases")] IReadOnlyList<AttentionCase> TestCases);
@@ -215,8 +272,8 @@ namespace BitNetSharp.Tests
             [property: JsonPropertyName("wqkv")] PackedQKVValues WQKV);
 
         internal sealed record PackedQKVValues(
-            [property: JsonPropertyName("qcur")] IReadOnlyList<float> Query,
-            [property: JsonPropertyName("kcur")] IReadOnlyList<float> Key,
-            [property: JsonPropertyName("vcur")] IReadOnlyList<float> Value);
+            [property: JsonPropertyName("qcur")] float[] Query,
+            [property: JsonPropertyName("kcur")] float[] Key,
+            [property: JsonPropertyName("vcur")] float[] Value);
     }
 }

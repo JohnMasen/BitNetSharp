@@ -14,6 +14,7 @@ namespace BitNetSharp.Benchmarks;
 [CPUUsageDiagnoser]
 public class RmsNormBenchmarks
 {
+    private BitNetMemoryManager? memoryManager;
     private BitNetModel? model;
     private BitNetSession? session;
     private RmsNormLayer? cpuSingleThreadLayer;
@@ -25,14 +26,15 @@ public class RmsNormBenchmarks
     [GlobalSetup]
     public void GlobalSetup()
     {
+        memoryManager = new BitNetMemoryManager();
         model = new BitNetModel();
         model.Load(BenchmarkProjectPaths.ModelPath);
         var normTensor = model.GetLayer(0).AttentionNorm;
         var embeddingLayer = new EmbeddingLayer(model, enableCache: true);
         embeddingLayer.Init();
-        var session = new BitNetSession(model)
+        var session = new BitNetSession(model, memoryManager)
         {
-            Tokens = [0],
+            Tokens = new[] { 0 },
             CurrentToken = 0,
         };
         this.session = session;
@@ -81,6 +83,8 @@ public class RmsNormBenchmarks
     [GlobalCleanup]
     public void GlobalCleanup()
     {
+        memoryManager?.Dispose();
+        memoryManager = null;
         model?.Dispose();
         model = null;
         session = null;
@@ -93,19 +97,19 @@ public class RmsNormBenchmarks
     }
 
     [Benchmark(Baseline = true)]
-    public float[] RmsNorm_CPU_SingleThread() => Run(cpuSingleThreadLayer!);
+    public Memory<float> RmsNorm_CPU_SingleThread() => Run(cpuSingleThreadLayer!);
 
     [Benchmark]
-    public float[] RmsNorm_CPU_MultiThread() => Run(cpuMultiThreadLayer!);
+    public Memory<float> RmsNorm_CPU_MultiThread() => Run(cpuMultiThreadLayer!);
 
     [Benchmark]
-    public float[] RmsNorm_Tensor_SingleThread() => Run(tensorSingleThreadLayer!);
+    public Memory<float> RmsNorm_Tensor_SingleThread() => Run(tensorSingleThreadLayer!);
 
     [Benchmark]
-    public float[] RmsNorm_Tensor_MultiThread() => Run(tensorMultiThreadLayer!);
+    public Memory<float> RmsNorm_Tensor_MultiThread() => Run(tensorMultiThreadLayer!);
 
     [Benchmark]
-    public float[] RmsNorm_SIMD_SingleThread()
+    public Memory<float> RmsNorm_SIMD_SingleThread()
     {
         if (simdSingleThreadLayer is null)
         {
@@ -116,7 +120,7 @@ public class RmsNormBenchmarks
     }
 
     [Benchmark]
-    public float[] RmsNorm_SIMD_MultiThread()
+    public Memory<float> RmsNorm_SIMD_MultiThread()
     {
         if (simdMultiThreadLayer is null)
         {
@@ -126,10 +130,10 @@ public class RmsNormBenchmarks
         return Run(simdMultiThreadLayer);
     }
 
-    private float[] Run(RmsNormLayer layer)
+    private Memory<float> Run(RmsNormLayer layer)
     {
         layer.Forward(session!);
-        return session!.RmsNorm!;
+        return session!.RmsNorm;
     }
 }
 
