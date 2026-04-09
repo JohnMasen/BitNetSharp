@@ -15,7 +15,7 @@
 | `FeedForwardNode` | 已实现 | `src/BitNetSharp/Nodes/FeedForwardNode.cs` | `src/tests/BitNetSharp.Tests/FeedForwardNodeTests.cs` | 是 | 已覆盖 `ffn_sub_norm` 与 `ffn_down` baseline；当前 node 仅依赖 `IOPProvider2` |
 | `FeedForwardResidualNode` | 已实现 | `src/BitNetSharp/Nodes/FeedForwardResidualNode.cs` | `src/tests/BitNetSharp.Tests/FeedForwardResidualNodeTests.cs` | 是 | 语义：`FeedForwardInput + FeedForwardOutput -> Embedding`；已迁移为依赖 `IOPProvider2` |
 | `FinalNormNode` | 已实现 | `src/BitNetSharp/Nodes/FinalNormNode.cs` | `src/tests/BitNetSharp.Tests/FinalNormNodeTests.cs` | 是 | 已覆盖 `CPU` / `Tensor` / `SIMD`；已迁移为依赖 `IOPProvider2` |
-| `LmHeadNode` | 已实现 | `src/BitNetSharp/Nodes/LmHeadNode.cs` | `src/tests/BitNetSharp.Tests/LmHeadNodeTests.cs` | 是 | 已覆盖 `CPU` / `Tensor` / `SIMD` logits baseline；已迁移为依赖 `IOPProvider2` |
+| `LmHeadNode` | 已实现 | `src/BitNetSharp/Nodes/LmHeadNode.cs` | `src/tests/BitNetSharp.Tests/LmHeadNodeTests.cs` | 是 | 已覆盖 `CPU` / `Tensor` / `SIMD` logits baseline；已迁移为依赖 `IOPProvider2`，`SIMD` 现使用独立实现 |
 
 ## Runtime Progress
 
@@ -31,4 +31,14 @@
 - 当前主要阻塞：单 token runtime 串联尚未实现
 - 已引入 `IOPProvider1` / `IOPProvider2` 以及 `CPUDefaultOPProvider` / `CPUTensorOPProvider` / `CPUSimdOPProvider`
 - 已移除 `CPUBaseOPProvider` 与 `OPProviderFactory`；当前 `Node` 层按 `InferenceConfig` 直接实例化具体 provider
-- `MathHelper` 已彻底移除；高层复合逻辑与低层 backend kernel 现均由 provider 与 `OPProviderCommon` 承载
+- `MathHelper` 已彻底移除；高层复合逻辑与低层 backend kernel 现均由 provider 承载
+- 各 concrete provider 已回收为单文件实现，避免额外的 `*.Kernels.cs` 分层
+- `IOPProvider2` 现已承载纯编排默认实现；共享参数校验已独立收敛到 `ValidationHelper`
+- `LmHead` 的 `CPU` / `Tensor` 实现与 CPU-style packed-weight fallback 已回收到具体 provider；共享 helper 不再承载这类 backend 专属实现
+- `QuantizeBitNetActivations` 已按 `CPU` / `Tensor` / `SIMD` 分别落到具体 provider；共享 helper 不再承载这类批量量化实现
+- `GetBitNetPackedWeightByteCount` 与 `FinalizeBitNetMappedProjection` 已在使用点直接内联；共享 helper 仅保留参数校验
+- 已完成 OP 多线程覆盖审计：当前仍存在量化、RMSNorm 归约、Tensor 量化后类型转换、以及 `IOPProvider2` 中 `ApplyScale` / `ApplyBias` 的单线程缺口
+- `QuantizeBitNetActivations` 已补齐 `CPU` / `Tensor` / `SIMD` 的多线程路径；当前剩余的大块数据单线程缺口主要是 RMSNorm 归约、Tensor 量化后类型转换、以及 `IOPProvider2` 中 `ApplyScale` / `ApplyBias`
+- `RMSNorm` 的归约阶段已补齐 `CPU` / `Tensor` / `SIMD` 的多线程路径；当前剩余的大块数据单线程缺口主要是 Tensor 量化后类型转换，以及 `IOPProvider2` 中 `ApplyScale` / `ApplyBias`
+- `CPUTensorOPProvider` 中量化后的 `sbyte -> float` 转换已补齐多线程路径；当前剩余的大块数据单线程缺口主要是 `IOPProvider2` 中 `ApplyScale` / `ApplyBias`
+- `IOPProvider2` 中的 `ApplyScale` / `ApplyBias` 已补齐多线程路径；当前 OP 内面对大块数据的主要公共处理环节已具备 thread-aware 实现

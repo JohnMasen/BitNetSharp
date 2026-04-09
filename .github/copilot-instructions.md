@@ -27,6 +27,8 @@
 - For this repo's memory abstraction, treat `IMemoryOwner` as a minimal disposable ownership object and place the primary design emphasis on `IMemoryView<T>` as the key typed access abstraction.
 - Simplify `MemoryManager` around two core purposes: shared memory management for multiple inference sessions, and serving as the destination for model weight loading. Keep `MemoryManager` as the base abstraction with a concrete built-in host-memory implementation, avoiding naming that concrete type as `DefaultMemoryManager`; prefer a name that describes its semantics rather than 'defaultness'.
 - Remove `CPUBaseOPProvider`; nodes should instantiate the concrete operation provider directly from configuration instead of using a shared base provider abstraction.
+- Move pure orchestration logic into `IOPProvider2` default interface implementations first, then consider further architecture simplification afterward.
+- For this repo, when implementing OP operators, multithreading support is required rather than optional for large-buffer processing paths.
 
 ## QKV Parallel Work Instructions
 - For QKV parallel work, `ThreadHelper` should support optional block-aligned splitting. Default splitting should not enforce alignment; only SIMD callers should pass an alignment parameter based on the required data byte length.
