@@ -4,7 +4,6 @@ using BitNetSharp.Core;
 using BitNetSharp.Nodes;
 using BitNetSharp.Models;
 using System;
-using System.IO;
 using System.Runtime.Intrinsics.X86;
 using Microsoft.VSDiagnostics;
 
@@ -30,15 +29,12 @@ public class RmsNormNodeBenchmarks
         model = new BitNetModel();
         model.Load(BenchmarkProjectPaths.ModelPath);
         var normTensor = model.GetLayer(0).AttentionNorm;
-        var embeddingNode = new EmbeddingNode(model, enableCache: true);
-        embeddingNode.Init();
-        var session = new BitNetSession(model, memoryManager)
+        session = new BitNetSession(model, memoryManager)
         {
             Tokens = new[] { 0 },
             CurrentToken = 0,
         };
-        this.session = session;
-        embeddingNode.Forward(session);
+        BenchmarkDataHelper.FillDeterministicValues(session.Embedding.Span, 2);
         cpuSingleThreadNode = new RmsNormNode(
             model,
             normTensor,
@@ -134,35 +130,5 @@ public class RmsNormNodeBenchmarks
     {
         node.Forward(session!);
         return session!.RmsNorm;
-    }
-}
-
-internal static class BenchmarkProjectPaths
-{
-    private static readonly string[] ModelPathSegments =
-    [
-        "Models",
-        "bitnet-b1.58-2B-4T-gguf",
-        "ggml-model-i2_s.gguf",
-    ];
-
-    public static string ModelPath => FindModelPath();
-
-    private static string FindModelPath()
-    {
-        DirectoryInfo? directory = new(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            string candidate = Path.Combine(directory.FullName, Path.Combine(ModelPathSegments));
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new FileNotFoundException(
-            $"Could not locate benchmark model file '{Path.Combine(ModelPathSegments)}' from '{AppContext.BaseDirectory}'.");
     }
 }

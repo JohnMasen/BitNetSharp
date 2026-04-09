@@ -61,7 +61,22 @@ namespace BitNetSharp.Tests
         [DynamicData(nameof(GetAttentionCaseIndices))]
         public void Attention_SubNormMatchesBaseline_CPU(int caseIndex)
         {
-            VerifyAttentionSubNormMatchesBaselineCpu(caseIndex);
+            VerifyAttentionSubNormMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.CPU);
+        }
+
+        [TestMethod]
+        [DynamicData(nameof(GetAttentionCaseIndices))]
+        public void Attention_SubNormMatchesBaseline_Tensor(int caseIndex)
+        {
+            VerifyAttentionSubNormMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.Tensor);
+        }
+
+        [TestMethod]
+        [DynamicData(nameof(GetAttentionCaseIndices))]
+        public void Attention_SubNormMatchesBaseline_SIMD(int caseIndex)
+        {
+            EnsureAvx2Supported();
+            VerifyAttentionSubNormMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.SIMD);
         }
 
         [TestMethod]
@@ -74,7 +89,22 @@ namespace BitNetSharp.Tests
         [DynamicData(nameof(GetAttentionCaseIndices))]
         public void Attention_OutputMatchesBaseline_CPU(int caseIndex)
         {
-            VerifyAttentionOutputMatchesBaselineCpu(caseIndex);
+            VerifyAttentionOutputMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.CPU);
+        }
+
+        [TestMethod]
+        [DynamicData(nameof(GetAttentionCaseIndices))]
+        public void Attention_OutputMatchesBaseline_Tensor(int caseIndex)
+        {
+            VerifyAttentionOutputMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.Tensor);
+        }
+
+        [TestMethod]
+        [DynamicData(nameof(GetAttentionCaseIndices))]
+        public void Attention_OutputMatchesBaseline_SIMD(int caseIndex)
+        {
+            EnsureAvx2Supported();
+            VerifyAttentionOutputMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.SIMD);
         }
 
         [TestMethod]
@@ -98,6 +128,11 @@ namespace BitNetSharp.Tests
 
         private static void VerifyAttentionSubNormMatchesBaselineCpu(int caseIndex)
         {
+            VerifyAttentionSubNormMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.CPU);
+        }
+
+        private static void VerifyAttentionSubNormMatchesBaseline(int caseIndex, BitNetSharp.Nodes.InferenceBackend backend)
+        {
             using var model = TestModelFactory.LoadModel();
             AttentionCase testCase = GetAttentionCase(caseIndex);
             var layerDefinition = model.GetLayer(0);
@@ -105,7 +140,7 @@ namespace BitNetSharp.Tests
                 model,
                 layerDefinition.AttentionSubNorm,
                 layerDefinition.AttentionOutputWeight,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
             var context = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             SetProjection(context, testCase);
 
@@ -118,6 +153,11 @@ namespace BitNetSharp.Tests
 
         private static void VerifyAttentionOutputMatchesBaselineCpu(int caseIndex)
         {
+            VerifyAttentionOutputMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.CPU);
+        }
+
+        private static void VerifyAttentionOutputMatchesBaseline(int caseIndex, BitNetSharp.Nodes.InferenceBackend backend)
+        {
             using var model = TestModelFactory.LoadModel();
             AttentionCase testCase = GetAttentionCase(caseIndex);
             var layerDefinition = model.GetLayer(0);
@@ -125,7 +165,7 @@ namespace BitNetSharp.Tests
                 model,
                 layerDefinition.AttentionSubNorm,
                 layerDefinition.AttentionOutputWeight,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
             var context = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             SetProjection(context, testCase);
 

@@ -32,73 +32,21 @@ public class QKVProjectionNodeBenchmarks
         model.Load(BenchmarkProjectPaths.ModelPath);
 
         var layerDefinition = model.GetLayer(0);
-        var embeddingNode = new EmbeddingNode(model, enableCache: true);
-        embeddingNode.Init();
-        var session = new BitNetSession(model, memoryManager)
+        session = new BitNetSession(model, memoryManager)
         {
             Tokens = new[] { 0 },
             CurrentToken = 0,
         };
-        this.session = session;
+        BenchmarkDataHelper.FillDeterministicValues(session.RmsNorm.Span, 3);
 
-        embeddingNode.Forward(session);
-        var rmsNormNode = new RmsNormNode(
-            model,
-            layerDefinition.AttentionNorm,
-            enableCache: true,
-            inferenceConfig: new InferenceConfig(InferenceBackend.CPU, 1));
-        rmsNormNode.Init();
-        rmsNormNode.Forward(session);
-        cpuSingleThreadNode = new QKVProjectionNode(
-            model,
-            layerDefinition.AttentionQueryWeight,
-            layerDefinition.AttentionKeyWeight,
-            layerDefinition.AttentionValueWeight,
-            enableCache: true,
-            inferenceConfig: new InferenceConfig(InferenceBackend.CPU, 1));
-        cpuSingleThreadNode.Init();
-        cpuMultiThreadNode = new QKVProjectionNode(
-            model,
-            layerDefinition.AttentionQueryWeight,
-            layerDefinition.AttentionKeyWeight,
-            layerDefinition.AttentionValueWeight,
-            enableCache: true,
-            inferenceConfig: new InferenceConfig(InferenceBackend.CPU, InferenceConfig.AutoThreadCount));
-        cpuMultiThreadNode.Init();
-        tensorSingleThreadNode = new QKVProjectionNode(
-            model,
-            layerDefinition.AttentionQueryWeight,
-            layerDefinition.AttentionKeyWeight,
-            layerDefinition.AttentionValueWeight,
-            enableCache: true,
-            inferenceConfig: new InferenceConfig(InferenceBackend.Tensor, 1));
-        tensorSingleThreadNode.Init();
-        tensorMultiThreadNode = new QKVProjectionNode(
-            model,
-            layerDefinition.AttentionQueryWeight,
-            layerDefinition.AttentionKeyWeight,
-            layerDefinition.AttentionValueWeight,
-            enableCache: true,
-            inferenceConfig: new InferenceConfig(InferenceBackend.Tensor, InferenceConfig.AutoThreadCount));
-        tensorMultiThreadNode.Init();
+        cpuSingleThreadNode = CreateNode(layerDefinition, InferenceBackend.CPU, 1);
+        cpuMultiThreadNode = CreateNode(layerDefinition, InferenceBackend.CPU, InferenceConfig.AutoThreadCount);
+        tensorSingleThreadNode = CreateNode(layerDefinition, InferenceBackend.Tensor, 1);
+        tensorMultiThreadNode = CreateNode(layerDefinition, InferenceBackend.Tensor, InferenceConfig.AutoThreadCount);
         if (Avx.IsSupported && Avx2.IsSupported)
         {
-            simdSingleThreadNode = new QKVProjectionNode(
-                model,
-                layerDefinition.AttentionQueryWeight,
-                layerDefinition.AttentionKeyWeight,
-                layerDefinition.AttentionValueWeight,
-                enableCache: true,
-                inferenceConfig: new InferenceConfig(InferenceBackend.SIMD, 1));
-            simdSingleThreadNode.Init();
-            simdMultiThreadNode = new QKVProjectionNode(
-                model,
-                layerDefinition.AttentionQueryWeight,
-                layerDefinition.AttentionKeyWeight,
-                layerDefinition.AttentionValueWeight,
-                enableCache: true,
-                inferenceConfig: new InferenceConfig(InferenceBackend.SIMD, InferenceConfig.AutoThreadCount));
-            simdMultiThreadNode.Init();
+            simdSingleThreadNode = CreateNode(layerDefinition, InferenceBackend.SIMD, 1);
+            simdMultiThreadNode = CreateNode(layerDefinition, InferenceBackend.SIMD, InferenceConfig.AutoThreadCount);
         }
     }
 
@@ -119,28 +67,16 @@ public class QKVProjectionNodeBenchmarks
     }
 
     [Benchmark(Baseline = true)]
-    public (Memory<float> Query, Memory<float> Key, Memory<float> Value) QKV_CPU_SingleThread()
-    {
-        return Run(cpuSingleThreadNode!);
-    }
+    public (Memory<float> Query, Memory<float> Key, Memory<float> Value) QKV_CPU_SingleThread() => Run(cpuSingleThreadNode!);
 
     [Benchmark]
-    public (Memory<float> Query, Memory<float> Key, Memory<float> Value) QKV_CPU_MultiThread()
-    {
-        return Run(cpuMultiThreadNode!);
-    }
+    public (Memory<float> Query, Memory<float> Key, Memory<float> Value) QKV_CPU_MultiThread() => Run(cpuMultiThreadNode!);
 
     [Benchmark]
-    public (Memory<float> Query, Memory<float> Key, Memory<float> Value) QKV_Tensor_SingleThread()
-    {
-        return Run(tensorSingleThreadNode!);
-    }
+    public (Memory<float> Query, Memory<float> Key, Memory<float> Value) QKV_Tensor_SingleThread() => Run(tensorSingleThreadNode!);
 
     [Benchmark]
-    public (Memory<float> Query, Memory<float> Key, Memory<float> Value) QKV_Tensor_MultiThread()
-    {
-        return Run(tensorMultiThreadNode!);
-    }
+    public (Memory<float> Query, Memory<float> Key, Memory<float> Value) QKV_Tensor_MultiThread() => Run(tensorMultiThreadNode!);
 
     [Benchmark]
     public (Memory<float> Query, Memory<float> Key, Memory<float> Value) QKV_SIMD_SingleThread()
@@ -162,6 +98,19 @@ public class QKVProjectionNodeBenchmarks
         }
 
         return Run(simdMultiThreadNode);
+    }
+
+    private QKVProjectionNode CreateNode(BitNetLayerDefinition layerDefinition, InferenceBackend backend, int threadCount)
+    {
+        var node = new QKVProjectionNode(
+            model!,
+            layerDefinition.AttentionQueryWeight,
+            layerDefinition.AttentionKeyWeight,
+            layerDefinition.AttentionValueWeight,
+            enableCache: true,
+            inferenceConfig: new InferenceConfig(backend, threadCount));
+        node.Init();
+        return node;
     }
 
     private (Memory<float> Query, Memory<float> Key, Memory<float> Value) Run(QKVProjectionNode node)

@@ -1,11 +1,9 @@
-using System;
 using System.Buffers;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
-using System.Threading.Tasks;
 
 namespace BitNetSharp.Core
 {
@@ -28,72 +26,7 @@ namespace BitNetSharp.Core
 
         public int ThreadCount { get; }
 
-        public void Add(ReadOnlyMemory<float> input, ReadOnlyMemory<float> addend, Memory<float> output, string operationName = "Add")
-        {
-            ExecuteAdd(input, addend, output);
-        }
-
-        public void ProjectBitNetI2(ReadOnlyMemory<float> input, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale, Memory<float> output, string operationName = "BitNet projection")
-        {
-            ExecuteProjectBitNetI2(input, packedWeights, outputLength, weightScale, output);
-        }
-
-        public void ProjectBitNetI2(ReadOnlyMemory<sbyte> quantizedValues, float activationScale, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale, Memory<float> output, string operationName = "BitNet projection")
-        {
-            ExecuteProjectBitNetI2(quantizedValues, activationScale, packedWeights, outputLength, weightScale, output);
-        }
-
-        public void ForwardSoftmax(ReadOnlySpan<float> input, Span<float> output, string operationName = "Softmax")
-        {
-            ExecuteForwardSoftmax(input, output);
-        }
-
-        public void ForwardRmsNorm(ReadOnlyMemory<float> input, ReadOnlyMemory<float> normWeights, float epsilon, Memory<float> output)
-        {
-            ExecuteForwardRmsNorm(input, normWeights, epsilon, output);
-        }
-
-        public void ForwardLmHead(ReadOnlyMemory<float> input, ReadOnlyMemory<Half> embeddingWeights, int rowLength, int vocabularySize, Memory<float> output)
-        {
-            ValidationHelper.ValidateLmHeadArguments(input, rowLength, vocabularySize, output);
-
-            Span<float> outputSpan = output.Span[..vocabularySize];
-            if (ThreadCount == 1 || vocabularySize <= 1)
-            {
-                ProjectLmHeadSimdRange(input.Span, embeddingWeights.Span, rowLength, outputSpan, 0, vocabularySize);
-                return;
-            }
-
-            float[] inputBuffer = input.ToArray();
-            Half[] embeddingWeightsBuffer = embeddingWeights.ToArray();
-            float[] outputBuffer = new float[vocabularySize];
-            ThreadHelper.ForEachRange(
-                outputBuffer.AsSpan(),
-                (startIndex, endIndex) => ProjectLmHeadSimdRange(inputBuffer, embeddingWeightsBuffer, rowLength, outputBuffer, startIndex, endIndex),
-                ThreadCount);
-            outputBuffer.AsSpan().CopyTo(outputSpan);
-        }
-
-        private void ExecuteForwardRmsNorm(ReadOnlyMemory<float> input, ReadOnlyMemory<float> normWeights, float epsilon, Memory<float> output)
-        {
-            EnsureRmsNormSupported(input.Length);
-            ReadOnlySpan<float> inputSpan = input.Span;
-            ReadOnlySpan<float> normWeightsSpan = normWeights.Span;
-            Span<float> outputSpan = output.Span;
-            ValidationHelper.ValidateRmsNormDestination(inputSpan, normWeightsSpan, outputSpan);
-
-            float inverseRootMeanSquare = ComputeRmsNormInverseRootMeanSquare(input, epsilon, ThreadCount);
-            if (ThreadCount == 1 || input.Length <= Vector256<float>.Count)
-            {
-                FillRmsNormRange(inputSpan, normWeightsSpan, inverseRootMeanSquare, outputSpan, 0, input.Length);
-                return;
-            }
-
-            ThreadHelper.ForEachRange(output.Span, (startIndex, endIndex) =>
-                FillRmsNormRange(input.Span, normWeights.Span, inverseRootMeanSquare, output.Span, startIndex, endIndex), ThreadCount, Vector256<float>.Count * sizeof(float));
-        }
-
-        private void ExecuteAdd(ReadOnlyMemory<float> input, ReadOnlyMemory<float> addend, Memory<float> output)
+        public void Add(ReadOnlyMemory<float> input, ReadOnlyMemory<float> addend, Memory<float> output)
         {
             ReadOnlySpan<float> inputSpan = input.Span;
             ReadOnlySpan<float> addendSpan = addend.Span;
@@ -103,15 +36,56 @@ namespace BitNetSharp.Core
 
             if (ThreadCount == 1 || input.Length <= Vector256<float>.Count)
             {
-                FillAddRange(inputSpan, addendSpan, outputSpan, 0, input.Length);
+                FillAddRange(inputSpan, addendSpan, outputSpan);
                 return;
             }
 
             ThreadHelper.ForEachRange(output.Span, (startIndex, endIndex) =>
-                FillAddRange(input.Span, addend.Span, output.Span, startIndex, endIndex), ThreadCount, Vector256<float>.Count * sizeof(float));
+                FillAddRange(
+                    input.Span.Slice(startIndex, endIndex - startIndex),
+                    addend.Span.Slice(startIndex, endIndex - startIndex),
+                    output.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount, Vector256<float>.Count * sizeof(float));
         }
 
-        private void ExecuteForwardSoftmax(ReadOnlySpan<float> input, Span<float> output)
+        public void ProjectBitNetI2(ReadOnlyMemory<float> input, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale, Memory<float> output)
+        {
+            ValidationHelper.ValidateBitNetProjectionArguments(input.Span, packedWeights.Span, outputLength);
+            EnsureBitNetProjectionSupported();
+            ValidationHelper.ValidateProjectionDestination(outputLength, output.Span);
+
+            using IMemoryOwner<sbyte> quantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(input.Length);
+            Memory<sbyte> quantizedValues = quantizedValuesOwner.Memory[..input.Length];
+            (float activationScale, _) = QuantizeBitNetActivations(input, quantizedValues, ThreadCount);
+            ProjectBitNetI2(quantizedValues, activationScale, packedWeights, outputLength, weightScale, output);
+        }
+
+        public void ProjectBitNetI2(ReadOnlyMemory<sbyte> quantizedValues, float activationScale, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale, Memory<float> output)
+        {
+            ValidationHelper.ValidateBitNetProjectionArguments(quantizedValues.Span, packedWeights.Span, outputLength);
+            EnsureBitNetProjectionSupported();
+            Span<float> outputSpan = output.Span;
+            ValidationHelper.ValidateProjectionDestination(outputLength, outputSpan);
+
+            const int PackedVectorWidth = 32;
+            // Each packed byte stores four 2-bit weights, so one output row uses inputLength / 4 bytes.
+            int packedRowByteCount = checked(quantizedValues.Length / 4);
+            if (ThreadCount == 1 || outputLength <= 1)
+            {
+                ProjectBitNetI2Range(quantizedValues.Span, packedWeights.Span, packedRowByteCount, activationScale, weightScale, outputSpan);
+                return;
+            }
+
+            ThreadHelper.ForEachRange(outputLength, (startIndex, endIndex) =>
+                ProjectBitNetI2Range(
+                    quantizedValues.Span,
+                    packedWeights.Span.Slice(startIndex * packedRowByteCount, (endIndex - startIndex) * packedRowByteCount),
+                    packedRowByteCount,
+                    activationScale,
+                    weightScale,
+                    output.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount, packedRowByteCount, PackedVectorWidth);
+        }
+
+        public void ForwardSoftmax(ReadOnlySpan<float> input, Span<float> output)
         {
             ValidationHelper.ValidateSoftmaxDestination(input, output);
             EnsureSoftmaxSupported();
@@ -129,6 +103,49 @@ namespace BitNetSharp.Core
             input.CopyTo(inputMemory.Span);
             ExecuteForwardSoftmaxMemory(inputMemory, outputMemory);
             outputMemory.Span.CopyTo(output);
+        }
+
+        public void ForwardRmsNorm(ReadOnlyMemory<float> input, ReadOnlyMemory<float> normWeights, float epsilon, Memory<float> output)
+        {
+            ReadOnlySpan<float> inputSpan = input.Span;
+            ReadOnlySpan<float> normWeightsSpan = normWeights.Span;
+            Span<float> outputSpan = output.Span;
+            ValidationHelper.ValidateRmsNormDestination(inputSpan, normWeightsSpan, outputSpan);
+
+            float inverseRootMeanSquare = ComputeRmsNormInverseRootMeanSquare(input, epsilon, ThreadCount);
+            if (ThreadCount == 1 || input.Length <= Vector256<float>.Count)
+            {
+                FillRmsNormRange(inputSpan, normWeightsSpan, inverseRootMeanSquare, outputSpan);
+                return;
+            }
+
+            ThreadHelper.ForEachRange(output.Span, (startIndex, endIndex) =>
+                FillRmsNormRange(
+                    input.Span.Slice(startIndex, endIndex - startIndex),
+                    normWeights.Span.Slice(startIndex, endIndex - startIndex),
+                    inverseRootMeanSquare,
+                    output.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount, Vector256<float>.Count * sizeof(float));
+        }
+
+        public void ForwardLmHead(ReadOnlyMemory<float> input, ReadOnlyMemory<byte> embeddingWeights, int rowLength, int vocabularySize, Memory<float> output)
+        {
+            ValidationHelper.ValidateLmHeadArguments(input, embeddingWeights, rowLength, vocabularySize, output);
+            ReadOnlySpan<Half> embeddingWeightsSpan = MemoryMarshal.Cast<byte, Half>(embeddingWeights.Span);
+
+            if (ThreadCount == 1 || vocabularySize <= 1)
+            {
+                ProjectLmHeadSimdRange(input.Span, embeddingWeightsSpan, rowLength, output.Span[..vocabularySize]);
+                return;
+            }
+
+            ThreadHelper.ForEachRange(
+                vocabularySize,
+                (startIndex, endIndex) => ProjectLmHeadSimdRange(
+                    input.Span,
+                    MemoryMarshal.Cast<byte, Half>(embeddingWeights.Span.Slice(startIndex * rowLength * sizeof(ushort), (endIndex - startIndex) * rowLength * sizeof(ushort))),
+                    rowLength,
+                    output.Span.Slice(startIndex, endIndex - startIndex)),
+                ThreadCount);
         }
 
         private void ExecuteForwardSoftmaxMemory(ReadOnlyMemory<float> input, Memory<float> output)
@@ -171,7 +188,10 @@ namespace BitNetSharp.Core
             Parallel.For(0, ranges.Length, new ParallelOptions { MaxDegreeOfParallelism = ranges.Length }, rangeIndex =>
             {
                 ThreadHelper.WorkRange range = ranges[rangeIndex];
-                partialSums[rangeIndex] = FillSoftmaxExponentRange(input.Span, output.Span, maxValue, range.StartIndex, range.EndIndex);
+                partialSums[rangeIndex] = FillSoftmaxExponentRange(
+                    input.Span.Slice(range.StartIndex, range.EndIndex - range.StartIndex),
+                    output.Span.Slice(range.StartIndex, range.EndIndex - range.StartIndex),
+                    maxValue);
             });
 
             double sum = 0d;
@@ -182,39 +202,7 @@ namespace BitNetSharp.Core
 
             float inverseSum = (float)(1d / sum);
             ThreadHelper.ForEachRange(output.Span, (startIndex, endIndex) =>
-                NormalizeSoftmaxOutputRange(output.Span, inverseSum, startIndex, endIndex), ThreadCount, Vector256<float>.Count * sizeof(float));
-        }
-
-        private void ExecuteProjectBitNetI2(ReadOnlyMemory<float> input, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale, Memory<float> output)
-        {
-            ValidationHelper.ValidateBitNetProjectionArguments(input.Span, packedWeights.Span, outputLength);
-            EnsureBitNetProjectionSupported();
-            ValidationHelper.ValidateProjectionDestination(outputLength, output.Span);
-
-            using IMemoryOwner<sbyte> quantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(input.Length);
-            Memory<sbyte> quantizedValues = quantizedValuesOwner.Memory[..input.Length];
-            (float activationScale, _) = QuantizeBitNetActivations(input, quantizedValues, ThreadCount);
-            ExecuteProjectBitNetI2(quantizedValues, activationScale, packedWeights, outputLength, weightScale, output);
-        }
-
-        private void ExecuteProjectBitNetI2(ReadOnlyMemory<sbyte> quantizedValues, float activationScale, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale, Memory<float> output)
-        {
-            ValidationHelper.ValidateBitNetProjectionArguments(quantizedValues.Span, packedWeights.Span, outputLength);
-            EnsureBitNetProjectionSupported();
-            Span<float> outputSpan = output.Span;
-            ValidationHelper.ValidateProjectionDestination(outputLength, outputSpan);
-
-            const int PackedVectorWidth = 32;
-            // Each packed byte stores four 2-bit weights, so one output row uses inputLength / 4 bytes.
-            int packedRowByteCount = checked(quantizedValues.Length / 4);
-            if (ThreadCount == 1 || outputLength <= 1)
-            {
-                ProjectBitNetI2Range(quantizedValues.Span, packedWeights.Span, packedRowByteCount, activationScale, weightScale, outputSpan, 0, outputLength);
-                return;
-            }
-
-            ThreadHelper.ForEachRange(outputLength, (startIndex, endIndex) =>
-                ProjectBitNetI2Range(quantizedValues.Span, packedWeights.Span, packedRowByteCount, activationScale, weightScale, output.Span, startIndex, endIndex), ThreadCount, packedRowByteCount, PackedVectorWidth);
+                NormalizeSoftmaxOutputRange(output.Span.Slice(startIndex, endIndex - startIndex), inverseSum), ThreadCount, Vector256<float>.Count * sizeof(float));
         }
 
         private static void ForwardSoftmaxCore(ReadOnlySpan<float> input, Span<float> output)
@@ -231,10 +219,10 @@ namespace BitNetSharp.Core
             NormalizeSoftmaxOutput(output[..input.Length], sum);
         }
 
-        private static double FillSoftmaxExponentRange(ReadOnlySpan<float> input, Span<float> output, float maxValue, int startIndex, int endIndex)
+        private static double FillSoftmaxExponentRange(ReadOnlySpan<float> input, Span<float> output, float maxValue)
         {
             double sum = 0d;
-            for (int index = startIndex; index < endIndex; index++)
+            for (int index = 0; index < input.Length; index++)
             {
                 float exponent = MathF.Exp(input[index] - maxValue);
                 output[index] = exponent;
@@ -244,7 +232,7 @@ namespace BitNetSharp.Core
             return sum;
         }
 
-        private static void FillRmsNormRange(ReadOnlySpan<float> input, ReadOnlySpan<float> normWeights, float inverseRootMeanSquare, Span<float> output, int startIndex, int endIndex)
+        private static void FillRmsNormRange(ReadOnlySpan<float> input, ReadOnlySpan<float> normWeights, float inverseRootMeanSquare, Span<float> output)
         {
             const int SimdWidth = 8;
             const int UnrolledWidth = SimdWidth * 4;
@@ -253,8 +241,8 @@ namespace BitNetSharp.Core
             ref float inputRef = ref MemoryMarshal.GetReference(input);
             ref float normWeightsRef = ref MemoryMarshal.GetReference(normWeights);
             ref float outputRef = ref MemoryMarshal.GetReference(output);
-            int unrolledEnd = endIndex - ((endIndex - startIndex) % UnrolledWidth);
-            for (int index = startIndex; index < unrolledEnd; index += UnrolledWidth)
+            int unrolledLength = output.Length - (output.Length % UnrolledWidth);
+            for (int index = 0; index < unrolledLength; index += UnrolledWidth)
             {
                 Vector256<float> inputVector0 = Vector256.LoadUnsafe(ref inputRef, (nuint)(index + (SimdWidth * 0)));
                 Vector256<float> normWeightVector0 = Vector256.LoadUnsafe(ref normWeightsRef, (nuint)(index + (SimdWidth * 0)));
@@ -273,7 +261,7 @@ namespace BitNetSharp.Core
                 Avx.Multiply(Avx.Multiply(inputVector3, inverseRootMeanSquareVector), normWeightVector3).StoreUnsafe(ref outputRef, (nuint)(index + (SimdWidth * 3)));
             }
 
-            for (int index = unrolledEnd; index < endIndex; index += SimdWidth)
+            for (int index = unrolledLength; index < output.Length; index += SimdWidth)
             {
                 Vector256<float> inputVector = Vector256.LoadUnsafe(ref inputRef, (nuint)index);
                 Vector256<float> normWeightVector = Vector256.LoadUnsafe(ref normWeightsRef, (nuint)index);
@@ -281,29 +269,29 @@ namespace BitNetSharp.Core
             }
         }
 
-        private static void FillAddRange(ReadOnlySpan<float> input, ReadOnlySpan<float> addend, Span<float> output, int startIndex, int endIndex)
+        private static void FillAddRange(ReadOnlySpan<float> input, ReadOnlySpan<float> addend, Span<float> output)
         {
             const int SimdWidth = 8;
             ref float inputRef = ref MemoryMarshal.GetReference(input);
             ref float addendRef = ref MemoryMarshal.GetReference(addend);
             ref float outputRef = ref MemoryMarshal.GetReference(output);
-            int vectorizedEnd = endIndex - ((endIndex - startIndex) % SimdWidth);
-            for (int index = startIndex; index < vectorizedEnd; index += SimdWidth)
+            int vectorizedLength = output.Length - (output.Length % SimdWidth);
+            for (int index = 0; index < vectorizedLength; index += SimdWidth)
             {
                 Vector256<float> inputVector = Vector256.LoadUnsafe(ref inputRef, (nuint)index);
                 Vector256<float> addendVector = Vector256.LoadUnsafe(ref addendRef, (nuint)index);
                 Avx.Add(inputVector, addendVector).StoreUnsafe(ref outputRef, (nuint)index);
             }
 
-            for (int index = vectorizedEnd; index < endIndex; index++)
+            for (int index = vectorizedLength; index < output.Length; index++)
             {
                 output[index] = input[index] + addend[index];
             }
         }
 
-        private static void ProjectBitNetI2Range(ReadOnlySpan<sbyte> quantizedValues, ReadOnlySpan<byte> packedWeights, int packedRowByteCount, float activationScale, float weightScale, Span<float> output, int startIndex, int endIndex)
+        private static void ProjectBitNetI2Range(ReadOnlySpan<sbyte> quantizedValues, ReadOnlySpan<byte> packedWeights, int packedRowByteCount, float activationScale, float weightScale, Span<float> output)
         {
-            for (int outputIndex = startIndex; outputIndex < endIndex; outputIndex++)
+            for (int outputIndex = 0; outputIndex < output.Length; outputIndex++)
             {
                 ReadOnlySpan<byte> packedRow = packedWeights.Slice(outputIndex * packedRowByteCount, packedRowByteCount);
                 int mappedDot = ComputeBitNetMappedDot(quantizedValues, packedRow);
@@ -312,9 +300,9 @@ namespace BitNetSharp.Core
             }
         }
 
-        private static void ProjectLmHeadSimdRange(ReadOnlySpan<float> input, ReadOnlySpan<Half> embeddingWeights, int rowLength, Span<float> output, int startIndex, int endIndex)
+        private static void ProjectLmHeadSimdRange(ReadOnlySpan<float> input, ReadOnlySpan<Half> embeddingWeights, int rowLength, Span<float> output)
         {
-            for (int outputIndex = startIndex; outputIndex < endIndex; outputIndex++)
+            for (int outputIndex = 0; outputIndex < output.Length; outputIndex++)
             {
                 int rowOffset = outputIndex * rowLength;
                 output[outputIndex] = ComputeLmHeadDotSimd(input, embeddingWeights.Slice(rowOffset, rowLength));
@@ -373,7 +361,9 @@ namespace BitNetSharp.Core
             Parallel.For(0, ranges.Length, new ParallelOptions { MaxDegreeOfParallelism = ranges.Length }, rangeIndex =>
             {
                 ThreadHelper.WorkRange range = ranges[rangeIndex];
-                partialMaxima[rangeIndex] = ComputeQuantizationMaxRange(input.Span, range.StartIndex, range.EndIndex, MinimumBitNetQuantizationMax);
+                partialMaxima[rangeIndex] = ComputeQuantizationMaxRange(
+                    input.Span.Slice(range.StartIndex, range.EndIndex - range.StartIndex),
+                    MinimumBitNetQuantizationMax);
             });
 
             float maxAbs = partialMaxima[0];
@@ -390,7 +380,10 @@ namespace BitNetSharp.Core
             Parallel.For(0, ranges.Length, new ParallelOptions { MaxDegreeOfParallelism = ranges.Length }, rangeIndex =>
             {
                 ThreadHelper.WorkRange range = ranges[rangeIndex];
-                partialSums[rangeIndex] = QuantizeBitNetActivationsRange(input.Span, quantizedValues.Span, activationScale, range.StartIndex, range.EndIndex);
+                partialSums[rangeIndex] = QuantizeBitNetActivationsRange(
+                    input.Span.Slice(range.StartIndex, range.EndIndex - range.StartIndex),
+                    quantizedValues.Span.Slice(range.StartIndex, range.EndIndex - range.StartIndex),
+                    activationScale);
             });
 
             int activationSum = 0;
@@ -489,18 +482,17 @@ namespace BitNetSharp.Core
             return (activationScale, activationSum);
         }
 
-        private static float ComputeQuantizationMaxRange(ReadOnlySpan<float> input, int startIndex, int endIndex, float minimum)
+        private static float ComputeQuantizationMaxRange(ReadOnlySpan<float> input, float minimum)
         {
             float maxAbs = minimum;
-            int length = endIndex - startIndex;
-            if (Avx.IsSupported && length >= Vector256<float>.Count)
+            if (Avx.IsSupported && input.Length >= Vector256<float>.Count)
             {
                 const int SimdWidth = 8;
-                int vectorizedEnd = endIndex - (length % SimdWidth);
+                int vectorizedLength = input.Length - (input.Length % SimdWidth);
                 ref float inputRef = ref MemoryMarshal.GetReference(input);
                 Vector256<float> signMask = Vector256.Create(-0.0f);
                 Vector256<float> maxVector = Vector256.Create(maxAbs);
-                for (int index = startIndex; index < vectorizedEnd; index += SimdWidth)
+                for (int index = 0; index < vectorizedLength; index += SimdWidth)
                 {
                     Vector256<float> inputVector = Vector256.LoadUnsafe(ref inputRef, (nuint)index);
                     Vector256<float> absoluteVector = Avx.AndNot(signMask, inputVector);
@@ -508,7 +500,7 @@ namespace BitNetSharp.Core
                 }
 
                 maxAbs = MathF.Max(maxAbs, HorizontalMax(maxVector));
-                for (int index = vectorizedEnd; index < endIndex; index++)
+                for (int index = vectorizedLength; index < input.Length; index++)
                 {
                     float absValue = MathF.Abs(input[index]);
                     if (absValue > maxAbs)
@@ -520,7 +512,7 @@ namespace BitNetSharp.Core
                 return maxAbs;
             }
 
-            for (int index = startIndex; index < endIndex; index++)
+            for (int index = 0; index < input.Length; index++)
             {
                 float absValue = MathF.Abs(input[index]);
                 if (absValue > maxAbs)
@@ -532,19 +524,18 @@ namespace BitNetSharp.Core
             return maxAbs;
         }
 
-        private static int QuantizeBitNetActivationsRange(ReadOnlySpan<float> input, Span<sbyte> quantizedValues, float activationScale, int startIndex, int endIndex)
+        private static int QuantizeBitNetActivationsRange(ReadOnlySpan<float> input, Span<sbyte> quantizedValues, float activationScale)
         {
             int activationSum = 0;
-            int length = endIndex - startIndex;
-            if (Avx.IsSupported && length >= Vector256<float>.Count)
+            if (Avx.IsSupported && input.Length >= Vector256<float>.Count)
             {
                 const int SimdWidth = 8;
-                int vectorizedEnd = endIndex - (length % SimdWidth);
+                int vectorizedLength = input.Length - (input.Length % SimdWidth);
                 ref float inputRef = ref MemoryMarshal.GetReference(input);
                 Vector256<float> scaleVector = Vector256.Create(activationScale);
                 Span<float> scaledValues = stackalloc float[SimdWidth];
 
-                for (int index = startIndex; index < vectorizedEnd; index += SimdWidth)
+                for (int index = 0; index < vectorizedLength; index += SimdWidth)
                 {
                     Vector256<float> inputVector = Vector256.LoadUnsafe(ref inputRef, (nuint)index);
                     Avx.Multiply(inputVector, scaleVector).CopyTo(scaledValues);
@@ -557,7 +548,7 @@ namespace BitNetSharp.Core
                     }
                 }
 
-                for (int index = vectorizedEnd; index < endIndex; index++)
+                for (int index = vectorizedLength; index < input.Length; index++)
                 {
                     int quantizedValue = (int)MathF.Round(input[index] * activationScale, MidpointRounding.ToEven);
                     quantizedValue = Math.Clamp(quantizedValue, sbyte.MinValue, sbyte.MaxValue);
@@ -568,7 +559,7 @@ namespace BitNetSharp.Core
                 return activationSum;
             }
 
-            for (int index = startIndex; index < endIndex; index++)
+            for (int index = 0; index < input.Length; index++)
             {
                 int quantizedValue = (int)MathF.Round(input[index] * activationScale, MidpointRounding.ToEven);
                 quantizedValue = Math.Clamp(quantizedValue, sbyte.MinValue, sbyte.MaxValue);
@@ -691,19 +682,19 @@ namespace BitNetSharp.Core
             }
         }
 
-        private static void NormalizeSoftmaxOutputRange(Span<float> output, float inverseSum, int startIndex, int endIndex)
+        private static void NormalizeSoftmaxOutputRange(Span<float> output, float inverseSum)
         {
             const int SimdWidth = 8;
-            int vectorizedEnd = endIndex - ((endIndex - startIndex) % SimdWidth);
+            int vectorizedLength = output.Length - (output.Length % SimdWidth);
             Vector256<float> inverseSumVector = Vector256.Create(inverseSum);
             ref float outputRef = ref MemoryMarshal.GetReference(output);
-            for (int index = startIndex; index < vectorizedEnd; index += SimdWidth)
+            for (int index = 0; index < vectorizedLength; index += SimdWidth)
             {
                 Vector256<float> outputVector = Vector256.LoadUnsafe(ref outputRef, (nuint)index);
                 Avx.Multiply(outputVector, inverseSumVector).StoreUnsafe(ref outputRef, (nuint)index);
             }
 
-            for (int index = vectorizedEnd; index < endIndex; index++)
+            for (int index = vectorizedLength; index < output.Length; index++)
             {
                 output[index] *= inverseSum;
             }

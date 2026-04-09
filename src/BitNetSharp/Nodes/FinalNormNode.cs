@@ -1,9 +1,7 @@
 using BitNetSharp.Core;
 using BitNetSharp.Models;
 using GGUFSharp;
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
 namespace BitNetSharp.Nodes
@@ -82,11 +80,8 @@ namespace BitNetSharp.Nodes
                 throw new InvalidOperationException("Session does not contain final hidden state.");
             }
 
-            ForwardCore(session.Embedding, session.FinalNormOutput);
-        }
-
-        private void ForwardCore(ReadOnlyMemory<float> input, Memory<float> output)
-        {
+            ReadOnlyMemory<float> input = session.Embedding;
+            Memory<float> output = session.FinalNormOutput;
             if (input.IsEmpty)
             {
                 throw new ArgumentException("Input must not be empty.", nameof(input));
@@ -101,7 +96,7 @@ namespace BitNetSharp.Nodes
             int requiredLength = input.Length;
             if (EnableCache)
             {
-                ExecuteForward(input, EnsureCachedNormWeights().AsMemory(0, requiredLength), output);
+                opProvider.ForwardRmsNorm(input, EnsureCachedNormWeights().AsMemory(0, requiredLength), model.Config!.AttentionLayerNormRmsEpsilon, output);
                 return;
             }
 
@@ -109,11 +104,6 @@ namespace BitNetSharp.Nodes
             using IMemoryOwner<float> normWeightsOwner = MemoryPool<float>.Shared.Rent(requiredLength);
             Memory<float> normWeights = normWeightsOwner.Memory[..requiredLength];
             FillFloatValues(tensorData.Memory.Span, outputNormTensor.TensorType, normWeights.Span);
-            ExecuteForward(input, normWeights, output);
-        }
-
-        private void ExecuteForward(ReadOnlyMemory<float> input, ReadOnlyMemory<float> normWeights, Memory<float> output)
-        {
             opProvider.ForwardRmsNorm(input, normWeights, model.Config!.AttentionLayerNormRmsEpsilon, output);
         }
 

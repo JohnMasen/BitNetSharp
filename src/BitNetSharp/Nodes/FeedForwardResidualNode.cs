@@ -1,6 +1,5 @@
 using BitNetSharp.Core;
 using BitNetSharp.Models;
-using System;
 
 namespace BitNetSharp.Nodes
 {
@@ -69,11 +68,9 @@ namespace BitNetSharp.Nodes
                 throw new InvalidOperationException("Session does not contain feed-forward output.");
             }
 
-            ForwardCore(session.FeedForwardInput, session.FeedForwardOutput, session.Embedding);
-        }
-
-        private void ForwardCore(ReadOnlyMemory<float> input, ReadOnlyMemory<float> residual, Memory<float> output)
-        {
+            ReadOnlyMemory<float> input = session.FeedForwardInput;
+            ReadOnlyMemory<float> residual = session.FeedForwardOutput;
+            Memory<float> output = session.Embedding;
             int embeddingLength = checked((int)model.Config!.EmbeddingLength);
             if (input.Length != embeddingLength)
             {
@@ -90,12 +87,7 @@ namespace BitNetSharp.Nodes
                 throw new ArgumentException("Feed-forward residual output length does not match the model embedding length.", nameof(output));
             }
 
-            ExecuteForward(input, residual, output[..embeddingLength]);
-        }
-
-        private void ExecuteForward(ReadOnlyMemory<float> input, ReadOnlyMemory<float> residual, Memory<float> output)
-        {
-            opProvider.Add(input, residual, output, "Feed-forward residual");
+            opProvider.Add(input, residual, output[..embeddingLength]);
         }
 
         private void EnsureInitialized()

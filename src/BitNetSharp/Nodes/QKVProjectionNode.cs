@@ -1,7 +1,5 @@
 using BitNetSharp.Core;
 using BitNetSharp.Models;
-using GGUFSharp;
-using System;
 using System.Buffers;
 using System.Runtime.InteropServices;
 
@@ -101,11 +99,10 @@ namespace BitNetSharp.Nodes
                 throw new InvalidOperationException("Session does not contain RMSNorm output.");
             }
 
-            ForwardCore(session.RmsNorm, session.QKVQuery, session.QKVKey, session.QKVValue);
-        }
-
-        private void ForwardCore(ReadOnlyMemory<float> input, Memory<float> query, Memory<float> key, Memory<float> value)
-        {
+            ReadOnlyMemory<float> input = session.RmsNorm;
+            Memory<float> query = session.QKVQuery;
+            Memory<float> key = session.QKVKey;
+            Memory<float> value = session.QKVValue;
             if (input.IsEmpty)
             {
                 throw new ArgumentException("Input must not be empty.", nameof(input));
@@ -129,26 +126,12 @@ namespace BitNetSharp.Nodes
                 return;
             }
 
-            PackedProjectionWeights queryWeights;
-            using (IMemoryOwner<byte> queryTensorData = model.ReadTensorData(queryTensor))
-            {
-                PackedProjectionWeights weights = ParsePackedWeights(queryTensorData.Memory, queryTensor, "QKV query");
-                queryWeights = new PackedProjectionWeights(weights.PackedWeights.ToArray(), weights.Scale);
-            }
-
-            PackedProjectionWeights keyWeights;
-            using (IMemoryOwner<byte> keyTensorData = model.ReadTensorData(keyTensor))
-            {
-                PackedProjectionWeights weights = ParsePackedWeights(keyTensorData.Memory, keyTensor, "QKV key");
-                keyWeights = new PackedProjectionWeights(weights.PackedWeights.ToArray(), weights.Scale);
-            }
-
-            PackedProjectionWeights valueWeights;
-            using (IMemoryOwner<byte> valueTensorData = model.ReadTensorData(valueTensor))
-            {
-                PackedProjectionWeights weights = ParsePackedWeights(valueTensorData.Memory, valueTensor, "QKV value");
-                valueWeights = new PackedProjectionWeights(weights.PackedWeights.ToArray(), weights.Scale);
-            }
+            using IMemoryOwner<byte> queryTensorData = model.ReadTensorData(queryTensor);
+            using IMemoryOwner<byte> keyTensorData = model.ReadTensorData(keyTensor);
+            using IMemoryOwner<byte> valueTensorData = model.ReadTensorData(valueTensor);
+            PackedProjectionWeights queryWeights = ParsePackedWeights(queryTensorData.Memory, queryTensor, "QKV query");
+            PackedProjectionWeights keyWeights = ParsePackedWeights(keyTensorData.Memory, keyTensor, "QKV key");
+            PackedProjectionWeights valueWeights = ParsePackedWeights(valueTensorData.Memory, valueTensor, "QKV value");
 
             opProvider.ForwardQKVProjection(input, queryWeights.PackedWeights, queryWeights.Scale, keyWeights.PackedWeights, keyWeights.Scale, valueWeights.PackedWeights, valueWeights.Scale, queryOutputLength, keyValueOutputLength, query, key, value);
         }

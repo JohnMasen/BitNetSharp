@@ -181,6 +181,29 @@ namespace BitNetSharp.Tests
         }
 
         [TestMethod]
+        public void RmsNorm_CPU_MultiThreadMatchesSingleThread()
+        {
+            VerifyRmsNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.CPU);
+        }
+
+        [TestMethod]
+        public void RmsNorm_Tensor_MultiThreadMatchesSingleThread()
+        {
+            VerifyRmsNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.Tensor);
+        }
+
+        [TestMethod]
+        public void RmsNorm_SIMD_MultiThreadMatchesSingleThread()
+        {
+            if (!Avx.IsSupported || !Avx2.IsSupported)
+            {
+                Assert.Inconclusive("AVX2 is not supported on the current machine.");
+            }
+
+            VerifyRmsNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.SIMD);
+        }
+
+        [TestMethod]
         [DynamicData(nameof(GetRmsNormCases))]
         public void RmsNorm_BaselineMatch_Tensor(int caseId)
         {
@@ -395,6 +418,32 @@ namespace BitNetSharp.Tests
             }
 
             return output;
+        }
+
+        private static void VerifyRmsNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend backend)
+        {
+            using var model = TestModelFactory.LoadModel();
+            LayerVectorCase testCase = GetLayerCase(0);
+            var normTensor = model.GetLayer(0).AttentionNorm;
+            var singleThreadNode = new BitNetSharp.Nodes.RmsNormNode(
+                model,
+                normTensor,
+                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
+            var multiThreadNode = new BitNetSharp.Nodes.RmsNormNode(
+                model,
+                normTensor,
+                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 2));
+            var singleThreadContext = TestModelFactory.CreateSession(model, token: testCase.TokenId);
+            var multiThreadContext = TestModelFactory.CreateSession(model, token: testCase.TokenId);
+            singleThreadContext.Embedding = testCase.Dequantized.Values.ToArray();
+            multiThreadContext.Embedding = testCase.Dequantized.Values.ToArray();
+
+            singleThreadNode.Init();
+            multiThreadNode.Init();
+            singleThreadNode.Forward(singleThreadContext);
+            multiThreadNode.Forward(multiThreadContext);
+
+            AssertFloatArraysAreClose(singleThreadContext.RmsNorm.Span.ToArray(), multiThreadContext.RmsNorm.Span.ToArray(), 1e-6f);
         }
 
         private static float[] ReadTensorValues(BitNetSharp.Models.BitNetModel model, BitNetSharp.Models.BitNetTensorInfo tensorInfo)

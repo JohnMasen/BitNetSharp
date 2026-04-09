@@ -1,5 +1,3 @@
-using System;
-
 namespace BitNetSharp.Core
 {
     /// <summary>
@@ -11,12 +9,12 @@ namespace BitNetSharp.Core
 
         int ThreadCount { get; }
 
-        void Add(ReadOnlyMemory<float> input, ReadOnlyMemory<float> addend, Memory<float> output, string operationName = "Add");
+        void Add(ReadOnlyMemory<float> input, ReadOnlyMemory<float> addend, Memory<float> output);
 
-        void ProjectBitNetI2(ReadOnlyMemory<float> input, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale, Memory<float> output, string operationName = "BitNet projection");
+        void ProjectBitNetI2(ReadOnlyMemory<float> input, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale, Memory<float> output);
 
-        void ProjectBitNetI2(ReadOnlyMemory<sbyte> quantizedValues, float activationScale, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale, Memory<float> output, string operationName = "BitNet projection");
+        void ProjectBitNetI2(ReadOnlyMemory<sbyte> quantizedValues, float activationScale, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale, Memory<float> output);
 
-        void ForwardSoftmax(ReadOnlySpan<float> input, Span<float> output, string operationName = "Softmax");
+        void ForwardSoftmax(ReadOnlySpan<float> input, Span<float> output);
     }
 }

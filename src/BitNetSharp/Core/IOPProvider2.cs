@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 
 namespace BitNetSharp.Core
@@ -32,9 +31,9 @@ namespace BitNetSharp.Core
             Memory<sbyte> quantizedValues = quantizedValuesOwner.Memory[..input.Length];
             (float activationScale, _) = QuantizeBitNetActivations(input, quantizedValues);
 
-            ProjectBitNetI2(quantizedValues, activationScale, queryPackedWeights, queryOutputLength, queryWeightScale, query, "QKV");
-            ProjectBitNetI2(quantizedValues, activationScale, keyPackedWeights, keyValueOutputLength, keyWeightScale, key, "QKV");
-            ProjectBitNetI2(quantizedValues, activationScale, valuePackedWeights, keyValueOutputLength, valueWeightScale, value, "QKV");
+            ProjectBitNetI2(quantizedValues, activationScale, queryPackedWeights, queryOutputLength, queryWeightScale, query);
+            ProjectBitNetI2(quantizedValues, activationScale, keyPackedWeights, keyValueOutputLength, keyWeightScale, key);
+            ProjectBitNetI2(quantizedValues, activationScale, valuePackedWeights, keyValueOutputLength, valueWeightScale, value);
         }
 
         void ForwardAttention(
@@ -62,7 +61,7 @@ namespace BitNetSharp.Core
             BuildSingleTokenAttentionContext(query, key, value, attentionContext, headCount, keyValueHeadCount, headDimension);
 
             ForwardRmsNorm(attentionContext, subNormWeights[..attentionContext.Length], epsilon, subNorm);
-            ProjectBitNetI2(subNorm, outputPackedWeights, embeddingLength, outputWeightScale, output, "Attention");
+            ProjectBitNetI2(subNorm, outputPackedWeights, embeddingLength, outputWeightScale, output);
             ApplyScale(output[..embeddingLength], outputScaleValues);
             ApplyBias(output[..embeddingLength], outputBiasValues);
         }
@@ -105,14 +104,14 @@ namespace BitNetSharp.Core
             Memory<sbyte> quantizedValues = quantizedValuesOwner.Memory[..input.Length];
             (float activationScale, _) = QuantizeBitNetActivations(input, quantizedValues);
 
-            ProjectBitNetI2(quantizedValues, activationScale, upPackedWeights, feedForwardLength, upWeightScale, up, "Feed-forward");
-            ProjectBitNetI2(quantizedValues, activationScale, gatePackedWeights, feedForwardLength, gateWeightScale, gate, "Feed-forward");
+            ProjectBitNetI2(quantizedValues, activationScale, upPackedWeights, feedForwardLength, upWeightScale, up);
+            ProjectBitNetI2(quantizedValues, activationScale, gatePackedWeights, feedForwardLength, gateWeightScale, gate);
             ApplySquaredReluGate(gate, up);
             ForwardRmsNorm(up, subNormWeights[..feedForwardLength], epsilon, subNormOutput);
-            ProjectBitNetI2(subNormOutput, downPackedWeights, embeddingLength, downWeightScale, output, "Feed-forward");
+            ProjectBitNetI2(subNormOutput, downPackedWeights, embeddingLength, downWeightScale, output);
         }
 
-        void ForwardLmHead(ReadOnlyMemory<float> input, ReadOnlyMemory<Half> embeddingWeights, int rowLength, int vocabularySize, Memory<float> output);
+        void ForwardLmHead(ReadOnlyMemory<float> input, ReadOnlyMemory<byte> embeddingWeights, int rowLength, int vocabularySize, Memory<float> output);
 
         private void BuildSingleTokenAttentionContext(
             ReadOnlyMemory<float> query,
@@ -165,7 +164,7 @@ namespace BitNetSharp.Core
                 int outputOffset = headIndex * headDimension;
 
                 attentionScore[0] = ComputeScaledAttentionScore(query, queryOffset, key, keyOffset, headDimension, scoreScale);
-                ForwardSoftmax(attentionScore, attentionWeight, "Attention");
+                ForwardSoftmax(attentionScore, attentionWeight);
 
                 for (int dimensionIndex = 0; dimensionIndex < headDimension; dimensionIndex++)
                 {

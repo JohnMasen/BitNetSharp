@@ -12,7 +12,7 @@
 - Eliminate `InferenceContext` and migrate its contents into `BitNetSession`, avoiding separate runtime-context abstractions for this area of the repo.
 - For layers in this repo, `Forward` must not be allowed before an explicit `Init` call. `Init` performs internal initialization, currently only eager cache loading.
 - For this repo's transformer pipeline, the attention layer input should be the QKV projection output, not the RMSNorm output directly.
-- For session state in this repo, do not construct `BitNetMemoryManager` inside `BitNetSession`; pass it in during construction so tests can instantiate a shared manager for current development and future code can use unified memory management.
+- For session state in this repo, do not construct `BitNetMemoryManager` inside `BitNetSession`; pass it in during construction so tests can instantiate a shared manager for current development and future code can use unified memory management. **Benchmark code should reuse `BitNetMemoryManager` instead of creating many managers, because the manager is designed for reuse and excess instances add unnecessary memory pressure.**
 - For BitNetSession output state in this repo, expose lazy-initialized get-only buffer properties and write into them in place instead of using session buffer request APIs or setter-based copies.
 - Simple scalar values such as `CurrentToken` should be ordinary properties and not be managed by `BitNetMemoryManager`, which should be reserved for large memory blocks.
 - Defer implementing true multi-token KV-cache/runtime work in this repo until after the single-token inference pipeline is fully working end-to-end.
@@ -28,7 +28,11 @@
 - Simplify `MemoryManager` around two core purposes: shared memory management for multiple inference sessions, and serving as the destination for model weight loading. Keep `MemoryManager` as the base abstraction with a concrete built-in host-memory implementation, avoiding naming that concrete type as `DefaultMemoryManager`; prefer a name that describes its semantics rather than 'defaultness'.
 - Remove `CPUBaseOPProvider`; nodes should instantiate the concrete operation provider directly from configuration instead of using a shared base provider abstraction.
 - Move pure orchestration logic into `IOPProvider2` default interface implementations first, then consider further architecture simplification afterward.
-- For this repo, when implementing OP operators, multithreading support is required rather than optional for large-buffer processing paths.
+- For this repo, when implementing OP operators, multithreading support is required for CPU backends only; GPU/NPU-style device backends do not need CPU-side multithreaded paths.
+- Remove no-op `operationName` parameters from OP APIs when they are not used anywhere and do not carry real semantics.
+- Avoid writing pure wrapper methods with no logic or semantics; inline them unless they add real validation, branching, adaptation, or abstraction value.
+- For this repo, any temporary `BitNetRuntime.Inference` method added only to validate the single-token runtime chain, along with its tests, is expected to be deleted later after the runtime architecture evolves.
+- Do not save "currently only running unit tests, not performance tests" as a long-term preference; this is a temporary situation while the user's machine is busy.
 
 ## QKV Parallel Work Instructions
 - For QKV parallel work, `ThreadHelper` should support optional block-aligned splitting. Default splitting should not enforce alignment; only SIMD callers should pass an alignment parameter based on the required data byte length.
@@ -62,3 +66,6 @@
 
 ## CSV Output Instructions
 - When the user asks for CSV output, preserve actual line breaks clearly, preferably in a fenced CSV block to avoid collapsing into one line.
+
+## Communication Preferences
+- Follow-up communication for this repo discussion should be conducted in Chinese.

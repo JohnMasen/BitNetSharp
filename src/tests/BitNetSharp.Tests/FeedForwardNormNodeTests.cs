@@ -68,6 +68,25 @@ namespace BitNetSharp.Tests
         }
 
         [TestMethod]
+        public void FeedForwardNorm_CPU_MultiThreadMatchesSingleThread()
+        {
+            VerifyFeedForwardNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.CPU);
+        }
+
+        [TestMethod]
+        public void FeedForwardNorm_Tensor_MultiThreadMatchesSingleThread()
+        {
+            VerifyFeedForwardNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.Tensor);
+        }
+
+        [TestMethod]
+        public void FeedForwardNorm_SIMD_MultiThreadMatchesSingleThread()
+        {
+            EnsureAvx2Supported();
+            VerifyFeedForwardNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.SIMD);
+        }
+
+        [TestMethod]
         public void FeedForwardNorm_ForwardWithoutInit_Throws()
         {
             using var model = TestModelFactory.LoadModel();
@@ -104,6 +123,32 @@ namespace BitNetSharp.Tests
             node.Forward(session);
 
             AssertFloatArraysAreClose(testCase.FirstLayerFfn.FeedForwardNorm, session.FeedForwardNorm.Span.ToArray(), 1e-6f, $"token {testCase.TokenId} ({testCase.TokenText})");
+        }
+
+        private static void VerifyFeedForwardNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend backend)
+        {
+            using var model = TestModelFactory.LoadModel();
+            FeedForwardNormCase testCase = GetFeedForwardNormCase(DebugCaseIndex);
+            var layerDefinition = model.GetLayer(0);
+            var singleThreadNode = new BitNetSharp.Nodes.FeedForwardNormNode(
+                model,
+                layerDefinition.FeedForwardNorm,
+                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
+            var multiThreadNode = new BitNetSharp.Nodes.FeedForwardNormNode(
+                model,
+                layerDefinition.FeedForwardNorm,
+                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 2));
+            var singleThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
+            var multiThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
+            testCase.FirstLayerFfn.FeedForwardInput.CopyTo(singleThreadSession.FeedForwardInput.Span);
+            testCase.FirstLayerFfn.FeedForwardInput.CopyTo(multiThreadSession.FeedForwardInput.Span);
+
+            singleThreadNode.Init();
+            multiThreadNode.Init();
+            singleThreadNode.Forward(singleThreadSession);
+            multiThreadNode.Forward(multiThreadSession);
+
+            AssertFloatArraysAreClose(singleThreadSession.FeedForwardNorm.Span.ToArray(), multiThreadSession.FeedForwardNorm.Span.ToArray(), 1e-6f, $"{backend} feed-forward norm threading");
         }
 
         private static FeedForwardNormVectorsDocument LoadFeedForwardNormVectorsDocument()

@@ -1,6 +1,5 @@
 using BitNetSharp.Core;
 using BitNetSharp.Models;
-using System;
 
 namespace BitNetSharp.Nodes
 {
@@ -69,11 +68,9 @@ namespace BitNetSharp.Nodes
                 throw new InvalidOperationException("Session does not contain attention output.");
             }
 
-            ForwardCore(session.Embedding, session.AttentionOutput, session.FeedForwardInput);
-        }
-
-        private void ForwardCore(ReadOnlyMemory<float> input, ReadOnlyMemory<float> residual, Memory<float> output)
-        {
+            ReadOnlyMemory<float> input = session.Embedding;
+            ReadOnlyMemory<float> residual = session.AttentionOutput;
+            Memory<float> output = session.FeedForwardInput;
             int embeddingLength = checked((int)model.Config!.EmbeddingLength);
             if (input.Length != embeddingLength)
             {
@@ -90,7 +87,7 @@ namespace BitNetSharp.Nodes
                 throw new ArgumentException("Residual output length does not match the model embedding length.", nameof(output));
             }
 
-            opProvider.Add(input, residual, output[..embeddingLength], "Residual");
+            opProvider.Add(input, residual, output[..embeddingLength]);
         }
 
         private void EnsureInitialized()

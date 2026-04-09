@@ -79,6 +79,25 @@ namespace BitNetSharp.Tests
         }
 
         [TestMethod]
+        public void QKV_CPU_MultiThreadMatchesSingleThread()
+        {
+            VerifyQKVMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.CPU);
+        }
+
+        [TestMethod]
+        public void QKV_Tensor_MultiThreadMatchesSingleThread()
+        {
+            VerifyQKVMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.Tensor);
+        }
+
+        [TestMethod]
+        public void QKV_SIMD_MultiThreadMatchesSingleThread()
+        {
+            EnsureAvx2Supported();
+            VerifyQKVMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.SIMD);
+        }
+
+        [TestMethod]
         public void QKVCache_MatchesUncachedReads()
         {
             using var model = TestModelFactory.LoadModel();
@@ -203,6 +222,38 @@ namespace BitNetSharp.Tests
             AssertFloatArraysAreClose(testCase.FirstLayerAttnQKV.WQKV.Value.ToArray(), context.QKVValue.Span.ToArray(), 1e-4f, caseName + " value");
         }
 
+        private static void VerifyQKVMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend backend)
+        {
+            using var model = TestModelFactory.LoadModel();
+            QKVCase testCase = GetQKVCase(0);
+            var layerDefinition = model.GetLayer(0);
+            var singleThreadNode = new BitNetSharp.Nodes.QKVProjectionNode(
+                model,
+                layerDefinition.AttentionQueryWeight,
+                layerDefinition.AttentionKeyWeight,
+                layerDefinition.AttentionValueWeight,
+                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
+            var multiThreadNode = new BitNetSharp.Nodes.QKVProjectionNode(
+                model,
+                layerDefinition.AttentionQueryWeight,
+                layerDefinition.AttentionKeyWeight,
+                layerDefinition.AttentionValueWeight,
+                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 2));
+            var singleThreadContext = TestModelFactory.CreateSession(model, token: testCase.TokenId);
+            var multiThreadContext = TestModelFactory.CreateSession(model, token: testCase.TokenId);
+            singleThreadContext.RmsNorm = testCase.FirstLayerRmsNorm.Values.ToArray();
+            multiThreadContext.RmsNorm = testCase.FirstLayerRmsNorm.Values.ToArray();
+
+            singleThreadNode.Init();
+            multiThreadNode.Init();
+            singleThreadNode.Forward(singleThreadContext);
+            multiThreadNode.Forward(multiThreadContext);
+
+            AssertFloatArraysAreClose(singleThreadContext.QKVQuery.Span.ToArray(), multiThreadContext.QKVQuery.Span.ToArray(), 1e-4f, $"{backend} QKV query threading");
+            AssertFloatArraysAreClose(singleThreadContext.QKVKey.Span.ToArray(), multiThreadContext.QKVKey.Span.ToArray(), 1e-4f, $"{backend} QKV key threading");
+            AssertFloatArraysAreClose(singleThreadContext.QKVValue.Span.ToArray(), multiThreadContext.QKVValue.Span.ToArray(), 1e-4f, $"{backend} QKV value threading");
+        }
+
         [TestMethod]
         public void QKV_ForwardWithoutInit_Throws()
         {
@@ -243,7 +294,7 @@ namespace BitNetSharp.Tests
         private static float[] ProjectWithProvider(IOPProvider1 provider, ReadOnlyMemory<float> input, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale)
         {
             float[] output = new float[outputLength];
-            provider.ProjectBitNetI2(input, packedWeights, outputLength, weightScale, output, "BitNet projection");
+            provider.ProjectBitNetI2(input, packedWeights, outputLength, weightScale, output);
             return output;
         }
 

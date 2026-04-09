@@ -1,9 +1,7 @@
 using BitNetSharp.Core;
 using BitNetSharp.Models;
 using GGUFSharp;
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
 namespace BitNetSharp.Nodes
@@ -110,11 +108,9 @@ namespace BitNetSharp.Nodes
                 throw new InvalidOperationException("Session does not contain feed-forward norm output.");
             }
 
-            ForwardCore(session.FeedForwardNorm, session.FeedForwardSubNorm, session.FeedForwardOutput);
-        }
-
-        private void ForwardCore(ReadOnlyMemory<float> input, Memory<float> subNorm, Memory<float> output)
-        {
+            ReadOnlyMemory<float> input = session.FeedForwardNorm;
+            Memory<float> subNorm = session.FeedForwardSubNorm;
+            Memory<float> output = session.FeedForwardOutput;
             int embeddingLength = checked((int)model.Config!.EmbeddingLength);
             if (input.Length != embeddingLength)
             {
@@ -146,19 +142,10 @@ namespace BitNetSharp.Nodes
                 return;
             }
 
-            PackedProjectionWeights upWeights;
-            using (IMemoryOwner<byte> upTensorData = model.ReadTensorData(upTensor))
-            {
-                PackedProjectionWeights weights = ParsePackedWeights(upTensorData.Memory, upTensor, "Feed-forward up");
-                upWeights = new PackedProjectionWeights(weights.PackedWeights.ToArray(), weights.Scale);
-            }
-
-            PackedProjectionWeights gateWeights;
-            using (IMemoryOwner<byte> gateTensorData = model.ReadTensorData(gateTensor))
-            {
-                PackedProjectionWeights weights = ParsePackedWeights(gateTensorData.Memory, gateTensor, "Feed-forward gate");
-                gateWeights = new PackedProjectionWeights(weights.PackedWeights.ToArray(), weights.Scale);
-            }
+            using IMemoryOwner<byte> upTensorData = model.ReadTensorData(upTensor);
+            using IMemoryOwner<byte> gateTensorData = model.ReadTensorData(gateTensor);
+            PackedProjectionWeights upWeights = ParsePackedWeights(upTensorData.Memory, upTensor, "Feed-forward up");
+            PackedProjectionWeights gateWeights = ParsePackedWeights(gateTensorData.Memory, gateTensor, "Feed-forward gate");
 
             float[] subNormWeights;
             using (IMemoryOwner<byte> subNormTensorData = model.ReadTensorData(subNormTensor))
@@ -167,12 +154,8 @@ namespace BitNetSharp.Nodes
                 FillFloatValues(subNormTensorData.Memory.Span, subNormTensor.TensorType, subNormWeights, "Feed-forward sub-norm");
             }
 
-            PackedProjectionWeights downWeights;
-            using (IMemoryOwner<byte> downTensorData = model.ReadTensorData(downTensor))
-            {
-                PackedProjectionWeights weights = ParsePackedWeights(downTensorData.Memory, downTensor, "Feed-forward down");
-                downWeights = new PackedProjectionWeights(weights.PackedWeights.ToArray(), weights.Scale);
-            }
+            using IMemoryOwner<byte> downTensorData = model.ReadTensorData(downTensor);
+            PackedProjectionWeights downWeights = ParsePackedWeights(downTensorData.Memory, downTensor, "Feed-forward down");
 
             opProvider.ForwardFeedForward(input, subNormWeights, model.Config!.AttentionLayerNormRmsEpsilon, gateWeights.PackedWeights, gateWeights.Scale, upWeights.PackedWeights, upWeights.Scale, downWeights.PackedWeights, downWeights.Scale, embeddingLength, feedForwardLength, subNorm, output);
         }

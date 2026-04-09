@@ -66,6 +66,25 @@ namespace BitNetSharp.Tests
         }
 
         [TestMethod]
+        public void FinalNorm_CPU_MultiThreadMatchesSingleThread()
+        {
+            VerifyFinalNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.CPU);
+        }
+
+        [TestMethod]
+        public void FinalNorm_Tensor_MultiThreadMatchesSingleThread()
+        {
+            VerifyFinalNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.Tensor);
+        }
+
+        [TestMethod]
+        public void FinalNorm_SIMD_MultiThreadMatchesSingleThread()
+        {
+            EnsureAvx2Supported();
+            VerifyFinalNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.SIMD);
+        }
+
+        [TestMethod]
         public void FinalNorm_Cache_MatchesUncachedReads()
         {
             using var model = TestModelFactory.LoadModel();
@@ -124,6 +143,29 @@ namespace BitNetSharp.Tests
             node.Forward(session);
 
             AssertFloatArraysAreClose(testCase.FinalNormOutput.Values, session.FinalNormOutput.Span.ToArray(), 1e-6f, $"token {testCase.TokenId} ({testCase.TokenText})");
+        }
+
+        private static void VerifyFinalNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend backend)
+        {
+            using var model = TestModelFactory.LoadModel();
+            FinalNormCase testCase = GetFinalNormCase(DebugCaseIndex);
+            var singleThreadNode = new BitNetSharp.Nodes.FinalNormNode(
+                model,
+                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
+            var multiThreadNode = new BitNetSharp.Nodes.FinalNormNode(
+                model,
+                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 2));
+            var singleThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
+            var multiThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
+            testCase.FinalNormInput.Values.CopyTo(singleThreadSession.Embedding.Span);
+            testCase.FinalNormInput.Values.CopyTo(multiThreadSession.Embedding.Span);
+
+            singleThreadNode.Init();
+            multiThreadNode.Init();
+            singleThreadNode.Forward(singleThreadSession);
+            multiThreadNode.Forward(multiThreadSession);
+
+            AssertFloatArraysAreClose(singleThreadSession.FinalNormOutput.Span.ToArray(), multiThreadSession.FinalNormOutput.Span.ToArray(), 1e-6f, $"{backend} final norm threading");
         }
 
         private static FinalNormVectorsDocument LoadFinalNormVectorsDocument()

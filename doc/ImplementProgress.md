@@ -15,20 +15,20 @@
 | `FeedForwardNode` | 已实现 | `src/BitNetSharp/Nodes/FeedForwardNode.cs` | `src/tests/BitNetSharp.Tests/FeedForwardNodeTests.cs` | 是 | 已覆盖 `ffn_sub_norm` 与 `ffn_down` baseline；当前 node 仅依赖 `IOPProvider2` |
 | `FeedForwardResidualNode` | 已实现 | `src/BitNetSharp/Nodes/FeedForwardResidualNode.cs` | `src/tests/BitNetSharp.Tests/FeedForwardResidualNodeTests.cs` | 是 | 语义：`FeedForwardInput + FeedForwardOutput -> Embedding`；已迁移为依赖 `IOPProvider2` |
 | `FinalNormNode` | 已实现 | `src/BitNetSharp/Nodes/FinalNormNode.cs` | `src/tests/BitNetSharp.Tests/FinalNormNodeTests.cs` | 是 | 已覆盖 `CPU` / `Tensor` / `SIMD`；已迁移为依赖 `IOPProvider2` |
-| `LmHeadNode` | 已实现 | `src/BitNetSharp/Nodes/LmHeadNode.cs` | `src/tests/BitNetSharp.Tests/LmHeadNodeTests.cs` | 是 | 已覆盖 `CPU` / `Tensor` / `SIMD` logits baseline；已迁移为依赖 `IOPProvider2`，`SIMD` 现使用独立实现 |
+| `LmHeadNode` | 已实现 | `src/BitNetSharp/Nodes/LmHeadNode.cs` | `src/tests/BitNetSharp.Tests/LmHeadNodeTests.cs` | 是 | 已覆盖 `CPU` / `Tensor` / `SIMD` logits baseline；已迁移为依赖 `IOPProvider2`，`SIMD` 现使用独立实现；非缓存路径已去除逐次 `Half[]` 权重复制 |
 
 ## Runtime Progress
 
 | 组件 | 当前状态 | 是否有测试数据 | 说明 |
 |---|---|---|---|
 | `SamplingNode` / next-token 选择 | 已实现 | 是 | 已覆盖 greedy `argmax`、`top-k`、`next_token_id` baseline |
-| 单 token 端到端 runtime 编排 | 未完成 | 是 | 各核心 node 已具备单测，`BitNetRuntime` 仍未接成完整推理链路 |
+| 单 token 端到端 runtime 编排 | 已实现（仅测试用途） | 是 | `BitNetRuntime` 已接起当前单 token 完整推理链路，但该入口仅用于链路验证，后续会连同测试一起删除 |
 
 ## Summary
 
 - 已实现并验证的 node：10 个
 - 未实现的核心 node：无
-- 当前主要阻塞：单 token runtime 串联尚未实现
+- 当前主要阻塞：runtime 正式架构仍未完成；当前单 token 端到端入口仅用于链路验证，后续会删除
 - 已引入 `IOPProvider1` / `IOPProvider2` 以及 `CPUDefaultOPProvider` / `CPUTensorOPProvider` / `CPUSimdOPProvider`
 - 已移除 `CPUBaseOPProvider` 与 `OPProviderFactory`；当前 `Node` 层按 `InferenceConfig` 直接实例化具体 provider
 - `MathHelper` 已彻底移除；高层复合逻辑与低层 backend kernel 现均由 provider 承载
@@ -42,3 +42,12 @@
 - `RMSNorm` 的归约阶段已补齐 `CPU` / `Tensor` / `SIMD` 的多线程路径；当前剩余的大块数据单线程缺口主要是 Tensor 量化后类型转换，以及 `IOPProvider2` 中 `ApplyScale` / `ApplyBias`
 - `CPUTensorOPProvider` 中量化后的 `sbyte -> float` 转换已补齐多线程路径；当前剩余的大块数据单线程缺口主要是 `IOPProvider2` 中 `ApplyScale` / `ApplyBias`
 - `IOPProvider2` 中的 `ApplyScale` / `ApplyBias` 已补齐多线程路径；当前 OP 内面对大块数据的主要公共处理环节已具备 thread-aware 实现
+- backend 驱动的 node 单元测试已补齐 `CPU` / `Tensor` / `SIMD` 的单线程基线与多线程一致性覆盖；缺失的 `BenchmarkSuite1` 6 档矩阵也已补齐到 `FeedForward` / `FeedForwardNorm` / `FeedForwardResidual` / `FinalNorm` / `LmHead`
+- `BenchmarkSuite1` 的 node benchmark 风格已进一步统一：公共输入填充与模型路径查找已提取，node 输入准备改为直接填充目标 session buffer，避免通过上游 node 预热来混入额外 setup 语义
+- `CPUDefaultOPProvider` / `CPUTensorOPProvider` / `CPUSimdOPProvider` 中仅做直接转发的 `Execute*` wrapper 已移除，公共入口直接承载实现，减少无意义的方法层级
+- `IOPProvider1` 中无实际用途的 `operationName` 参数已移除；`IOPProvider2` 默认实现、node 调用点与相关测试已同步清理这类无效标签参数
+- `RmsNormNode` / `FeedForwardNormNode` / `FinalNormNode` / `FeedForwardResidualNode` 中仅做直接转发的 `ExecuteForward` wrapper 也已移除；当前 node/OP 主链路中的无意义方法层级已继续压缩
+- `LmHeadNode` / `QKVProjectionNode` / `ResidualNode` / `FeedForwardNode` / `AttentionNode` 以及剩余 norm/residual node 中仅作为 `Forward` 延续的 `ForwardCore` 已内联回 `Forward`；当前 node 主链路中的 trivial wrapper 基本已清掉
+- 已为 `BitNetRuntime` 添加临时 `Inference(int tokenId)` 入口，用于验证当前单 token 完整链路：`Embedding -> per-layer(attn norm / QKV / Attention / Residual / FFN norm / FFN / FFN residual) -> FinalNorm -> LmHead -> Sampling -> Decode`；该方法及其测试后续将随 runtime 正式架构演进一并删除
+- 多余的 `global::BitNetSharp.` 资格限定已继续清理；当前剩余测试代码已改为优先使用普通命名空间引用，仅在未来确有命名冲突时才保留 `global::`
+- 临时 `BitNetRuntime.Inference` 测试已补上对 `layer_vectors_pure.json` 中 `next_token_id` 的直接断言，当前既验证 runtime 编排链路一致性，也验证最终 decode 输出与 baseline 数据一致

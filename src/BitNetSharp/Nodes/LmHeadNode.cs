@@ -1,10 +1,6 @@
 using BitNetSharp.Core;
 using BitNetSharp.Models;
 using GGUFSharp;
-using System;
-using System.Buffers;
-using System.Numerics.Tensors;
-using System.Runtime.InteropServices;
 
 namespace BitNetSharp.Nodes
 {
@@ -17,7 +13,7 @@ namespace BitNetSharp.Nodes
         private readonly BitNetModel model;
         private readonly BitNetTensorInfo tokenEmbedding;
         private readonly IOPProvider2 opProvider;
-        private Half[]? cachedEmbeddingWeights;
+        private byte[]? cachedEmbeddingWeights;
         private bool isInitialized;
 
         public LmHeadNode(BitNetModel model, bool enableCache = false, global::BitNetSharp.Nodes.InferenceConfig? inferenceConfig = null)
@@ -82,11 +78,8 @@ namespace BitNetSharp.Nodes
                 throw new InvalidOperationException("Session does not contain final norm output.");
             }
 
-            ForwardCore(session.FinalNormOutput, session.Logits);
-        }
-
-        private void ForwardCore(ReadOnlyMemory<float> input, Memory<float> output)
-        {
+            ReadOnlyMemory<float> input = session.FinalNormOutput;
+            Memory<float> output = session.Logits;
             int embeddingLength = checked((int)model.Config!.EmbeddingLength);
             int vocabularySize = checked((int)model.Config.VocabularySize);
             if (input.Length != embeddingLength)
@@ -106,8 +99,7 @@ namespace BitNetSharp.Nodes
             }
 
             using var tensorData = model.ReadTensorData(tokenEmbedding);
-            Half[] embeddingWeights = MemoryMarshal.Cast<byte, Half>(tensorData.Memory.Span).ToArray();
-            opProvider.ForwardLmHead(input, embeddingWeights, embeddingLength, vocabularySize, output);
+            opProvider.ForwardLmHead(input, tensorData.Memory[..GetEmbeddingWeightByteCount()], embeddingLength, vocabularySize, output);
         }
 
         private void ValidateTensorShape()
@@ -135,13 +127,18 @@ namespace BitNetSharp.Nodes
             }
         }
 
-        private Half[] ReadEmbeddingWeights()
+        private int GetEmbeddingWeightByteCount()
         {
-            using var tensorData = model.ReadTensorData(tokenEmbedding);
-            return MemoryMarshal.Cast<byte, Half>(tensorData.Memory.Span).ToArray();
+            return checked((int)model.Config!.EmbeddingLength * (int)model.Config.VocabularySize * sizeof(ushort));
         }
 
-        private Half[] EnsureCachedEmbeddingWeights()
+        private byte[] ReadEmbeddingWeights()
+        {
+            using var tensorData = model.ReadTensorData(tokenEmbedding);
+            return tensorData.Memory[..GetEmbeddingWeightByteCount()].ToArray();
+        }
+
+        private byte[] EnsureCachedEmbeddingWeights()
         {
             return cachedEmbeddingWeights ??= ReadEmbeddingWeights();
         }

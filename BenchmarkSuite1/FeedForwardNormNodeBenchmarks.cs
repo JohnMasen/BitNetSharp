@@ -1,42 +1,43 @@
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Order;
-using BitNetSharp.Core;
-using BitNetSharp.Nodes;
 using BitNetSharp.Models;
+using BitNetSharp.Nodes;
 using Microsoft.VSDiagnostics;
 using System;
 using System.Runtime.Intrinsics.X86;
 
 namespace BitNetSharp.Benchmarks;
+
 [HideColumns("Error", "StdDev", "Median", "RatioSD")]
 [Orderer(SummaryOrderPolicy.FastestToSlowest)]
 [CPUUsageDiagnoser]
-public class AttentionNodeBenchmarks
+public class FeedForwardNormNodeBenchmarks
 {
     private BitNetMemoryManager? memoryManager;
     private BitNetModel? model;
     private BitNetSession? session;
-    private AttentionNode? cpuSingleThreadNode;
-    private AttentionNode? cpuMultiThreadNode;
-    private AttentionNode? tensorSingleThreadNode;
-    private AttentionNode? tensorMultiThreadNode;
-    private AttentionNode? simdSingleThreadNode;
-    private AttentionNode? simdMultiThreadNode;
+    private FeedForwardNormNode? cpuSingleThreadNode;
+    private FeedForwardNormNode? cpuMultiThreadNode;
+    private FeedForwardNormNode? tensorSingleThreadNode;
+    private FeedForwardNormNode? tensorMultiThreadNode;
+    private FeedForwardNormNode? simdSingleThreadNode;
+    private FeedForwardNormNode? simdMultiThreadNode;
+
     [GlobalSetup]
     public void GlobalSetup()
     {
         memoryManager = new BitNetMemoryManager();
         model = new BitNetModel();
         model.Load(BenchmarkProjectPaths.ModelPath);
+
         var layerDefinition = model.GetLayer(0);
         session = new BitNetSession(model, memoryManager)
         {
             Tokens = new[] { 0 },
             CurrentToken = 0,
         };
-        BenchmarkDataHelper.FillDeterministicValues(session.QKVQuery.Span, 23);
-        BenchmarkDataHelper.FillDeterministicValues(session.QKVKey.Span, 29);
-        BenchmarkDataHelper.FillDeterministicValues(session.QKVValue.Span, 31);
+        BenchmarkDataHelper.FillDeterministicValues(session.FeedForwardInput.Span, 7);
+
         cpuSingleThreadNode = CreateNode(layerDefinition, InferenceBackend.CPU, 1);
         cpuMultiThreadNode = CreateNode(layerDefinition, InferenceBackend.CPU, InferenceConfig.AutoThreadCount);
         tensorSingleThreadNode = CreateNode(layerDefinition, InferenceBackend.Tensor, 1);
@@ -65,56 +66,54 @@ public class AttentionNodeBenchmarks
     }
 
     [Benchmark(Baseline = true)]
-    public (Memory<float> SubNorm, Memory<float> Output) Attention_CPU_SingleThread() => Run(cpuSingleThreadNode!);
+    public Memory<float> FeedForwardNorm_CPU_SingleThread() => Run(cpuSingleThreadNode!);
 
     [Benchmark]
-    public (Memory<float> SubNorm, Memory<float> Output) Attention_CPU_MultiThread() => Run(cpuMultiThreadNode!);
+    public Memory<float> FeedForwardNorm_CPU_MultiThread() => Run(cpuMultiThreadNode!);
 
     [Benchmark]
-    public (Memory<float> SubNorm, Memory<float> Output) Attention_Tensor_SingleThread() => Run(tensorSingleThreadNode!);
+    public Memory<float> FeedForwardNorm_Tensor_SingleThread() => Run(tensorSingleThreadNode!);
 
     [Benchmark]
-    public (Memory<float> SubNorm, Memory<float> Output) Attention_Tensor_MultiThread() => Run(tensorMultiThreadNode!);
+    public Memory<float> FeedForwardNorm_Tensor_MultiThread() => Run(tensorMultiThreadNode!);
 
     [Benchmark]
-    public (Memory<float> SubNorm, Memory<float> Output) Attention_SIMD_SingleThread()
+    public Memory<float> FeedForwardNorm_SIMD_SingleThread()
     {
         if (simdSingleThreadNode is null)
         {
-            throw new PlatformNotSupportedException("Attention SIMD benchmark requires AVX2 support.");
+            throw new PlatformNotSupportedException("Feed-forward norm SIMD benchmark requires AVX2 support.");
         }
 
         return Run(simdSingleThreadNode);
     }
 
     [Benchmark]
-    public (Memory<float> SubNorm, Memory<float> Output) Attention_SIMD_MultiThread()
+    public Memory<float> FeedForwardNorm_SIMD_MultiThread()
     {
         if (simdMultiThreadNode is null)
         {
-            throw new PlatformNotSupportedException("Attention SIMD benchmark requires AVX2 support.");
+            throw new PlatformNotSupportedException("Feed-forward norm SIMD benchmark requires AVX2 support.");
         }
 
         return Run(simdMultiThreadNode);
     }
 
-    private AttentionNode CreateNode(BitNetLayerDefinition layerDefinition, InferenceBackend backend, int threadCount)
+    private FeedForwardNormNode CreateNode(BitNetLayerDefinition layerDefinition, InferenceBackend backend, int threadCount)
     {
-        var node = new AttentionNode(
+        var node = new FeedForwardNormNode(
             model!,
-            layerDefinition.AttentionSubNorm,
-            layerDefinition.AttentionOutputWeight,
-            layerDefinition.AttentionOutputScale,
-            layerDefinition.AttentionOutputBias,
+            layerDefinition.FeedForwardNorm,
             enableCache: true,
             inferenceConfig: new InferenceConfig(backend, threadCount));
         node.Init();
         return node;
     }
 
-    private (Memory<float> SubNorm, Memory<float> Output) Run(AttentionNode node)
+    private Memory<float> Run(FeedForwardNormNode node)
     {
         node.Forward(session!);
-        return (session!.AttentionSubNorm, session.AttentionOutput);
+        return session!.FeedForwardNorm;
     }
+
 }

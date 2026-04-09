@@ -66,6 +66,25 @@ namespace BitNetSharp.Tests
         }
 
         [TestMethod]
+        public void FeedForwardResidual_CPU_MultiThreadMatchesSingleThread()
+        {
+            VerifyFeedForwardResidualMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.CPU);
+        }
+
+        [TestMethod]
+        public void FeedForwardResidual_Tensor_MultiThreadMatchesSingleThread()
+        {
+            VerifyFeedForwardResidualMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.Tensor);
+        }
+
+        [TestMethod]
+        public void FeedForwardResidual_SIMD_MultiThreadMatchesSingleThread()
+        {
+            EnsureSimdSupported();
+            VerifyFeedForwardResidualMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.SIMD);
+        }
+
+        [TestMethod]
         public void FeedForwardResidual_ForwardWithoutInit_Throws()
         {
             using var model = TestModelFactory.LoadModel();
@@ -100,6 +119,31 @@ namespace BitNetSharp.Tests
             node.Forward(session);
 
             AssertFloatArraysAreClose(testCase.FirstLayerFfn.LayerOutput, session.Embedding.Span.ToArray(), 1e-4f, $"token {testCase.TokenId} ({testCase.TokenText})");
+        }
+
+        private static void VerifyFeedForwardResidualMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend backend)
+        {
+            using var model = TestModelFactory.LoadModel();
+            FeedForwardResidualCase testCase = GetFeedForwardResidualCase(DebugCaseIndex);
+            var singleThreadNode = new BitNetSharp.Nodes.FeedForwardResidualNode(
+                model,
+                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
+            var multiThreadNode = new BitNetSharp.Nodes.FeedForwardResidualNode(
+                model,
+                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 2));
+            var singleThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
+            var multiThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
+            testCase.FirstLayerFfn.FeedForwardInput.CopyTo(singleThreadSession.FeedForwardInput.Span);
+            testCase.FirstLayerFfn.FeedForwardInput.CopyTo(multiThreadSession.FeedForwardInput.Span);
+            testCase.FirstLayerFfn.FeedForwardDown.CopyTo(singleThreadSession.FeedForwardOutput.Span);
+            testCase.FirstLayerFfn.FeedForwardDown.CopyTo(multiThreadSession.FeedForwardOutput.Span);
+
+            singleThreadNode.Init();
+            multiThreadNode.Init();
+            singleThreadNode.Forward(singleThreadSession);
+            multiThreadNode.Forward(multiThreadSession);
+
+            AssertFloatArraysAreClose(singleThreadSession.Embedding.Span.ToArray(), multiThreadSession.Embedding.Span.ToArray(), 1e-4f, $"{backend} feed-forward residual threading");
         }
 
         private static FeedForwardResidualVectorsDocument LoadFeedForwardResidualVectorsDocument()

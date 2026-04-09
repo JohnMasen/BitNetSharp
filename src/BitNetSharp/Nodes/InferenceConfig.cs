@@ -1,5 +1,3 @@
-using System;
-
 namespace BitNetSharp.Nodes
 {
     public sealed class InferenceConfig

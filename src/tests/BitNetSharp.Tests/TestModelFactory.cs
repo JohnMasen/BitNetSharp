@@ -2,7 +2,7 @@ namespace BitNetSharp.Tests
 {
     internal static class TestModelFactory
     {
-        private static readonly global::BitNetSharp.BitNetMemoryManager SharedMemoryManager = new();
+        private static readonly BitNetMemoryManager SharedMemoryManager = new();
 
         internal static Models.BitNetModel LoadModel(Models.BitNetModelLoadOptions? options = null)
         {
@@ -19,11 +19,11 @@ namespace BitNetSharp.Tests
             return model;
         }
 
-        internal static global::BitNetSharp.BitNetSession CreateSession(Models.BitNetModel model, int token)
+        internal static BitNetSession CreateSession(Models.BitNetModel model, int token)
         {
             ArgumentNullException.ThrowIfNull(model);
 
-            return new global::BitNetSharp.BitNetSession(model, SharedMemoryManager)
+            return new BitNetSession(model, SharedMemoryManager)
             {
                 Tokens = new[] { token },
                 CurrentToken = token,

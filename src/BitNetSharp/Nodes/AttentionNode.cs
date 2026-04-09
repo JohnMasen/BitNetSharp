@@ -1,7 +1,6 @@
 using BitNetSharp.Core;
 using BitNetSharp.Models;
 using GGUFSharp;
-using System;
 using System.Buffers;
 using System.Runtime.InteropServices;
 
@@ -136,16 +135,16 @@ namespace BitNetSharp.Nodes
                 throw new InvalidOperationException("Session does not contain complete QKV projection output.");
             }
 
-            ForwardCore(session.QKVQuery, session.QKVKey, session.QKVValue, session.AttentionSubNorm, session.AttentionOutput);
-        }
-
-        private void ForwardCore(ReadOnlyMemory<float> query, ReadOnlyMemory<float> key, ReadOnlyMemory<float> value, Memory<float> subNorm, Memory<float> output)
-        {
+            ReadOnlyMemory<float> query = session.QKVQuery;
+            ReadOnlyMemory<float> key = session.QKVKey;
+            ReadOnlyMemory<float> value = session.QKVValue;
+            Memory<float> subNorm = session.AttentionSubNorm;
+            Memory<float> output = session.AttentionOutput;
             if (EnableCache)
             {
                 PackedProjectionWeights cachedOutputWeights = EnsureCachedOutputWeights();
-                float[] cachedOutputScaleValues = TryEnsureCachedOutputScaleValues().ToArray();
-                float[] cachedOutputBiasValues = TryEnsureCachedOutputBiasValues().ToArray();
+                ReadOnlyMemory<float> cachedOutputScaleValues = TryEnsureCachedOutputScaleValues();
+                ReadOnlyMemory<float> cachedOutputBiasValues = TryEnsureCachedOutputBiasValues();
                 opProvider.ForwardAttention(query, key, value, EnsureCachedSubNormWeights().AsMemory(), model.Config!.AttentionLayerNormRmsEpsilon, cachedOutputWeights.PackedWeights, cachedOutputWeights.Scale, checked((int)model.Config.EmbeddingLength), checked((int)model.Config.KeyValueProjectionSize), checked((int)model.Config.AttentionHeadCount), checked((int)model.Config.AttentionKeyValueHeadCount), checked((int)model.Config.AttentionHeadDimension), subNorm, output, cachedOutputScaleValues, cachedOutputBiasValues);
                 return;
             }
@@ -298,14 +297,14 @@ namespace BitNetSharp.Nodes
             return cachedSubNormWeights ??= ReadSubNormWeights();
         }
 
-        private ReadOnlySpan<float> TryEnsureCachedOutputScaleValues()
+        private ReadOnlyMemory<float> TryEnsureCachedOutputScaleValues()
         {
-            return outputScaleTensor is null ? [] : cachedOutputScaleValues ??= ReadFloatTensor(outputScaleTensor);
+            return outputScaleTensor is null ? ReadOnlyMemory<float>.Empty : cachedOutputScaleValues ??= ReadFloatTensor(outputScaleTensor);
         }
 
-        private ReadOnlySpan<float> TryEnsureCachedOutputBiasValues()
+        private ReadOnlyMemory<float> TryEnsureCachedOutputBiasValues()
         {
-            return outputBiasTensor is null ? [] : cachedOutputBiasValues ??= ReadFloatTensor(outputBiasTensor);
+            return outputBiasTensor is null ? ReadOnlyMemory<float>.Empty : cachedOutputBiasValues ??= ReadFloatTensor(outputBiasTensor);
         }
 
         private PackedProjectionWeights ReadPackedWeights(BitNetTensorInfo tensor)

@@ -1,5 +1,4 @@
-﻿using System;
-using BitNetSharp.Models;
+﻿using BitNetSharp.Models;
 
 namespace BitNetSharp
 {

@@ -1,8 +1,7 @@
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Order;
-using BitNetSharp.Core;
-using BitNetSharp.Nodes;
 using BitNetSharp.Models;
+using BitNetSharp.Nodes;
 using Microsoft.VSDiagnostics;
 using System;
 using System.Runtime.Intrinsics.X86;
@@ -12,17 +11,17 @@ namespace BitNetSharp.Benchmarks;
 [HideColumns("Error", "StdDev", "Median", "RatioSD")]
 [Orderer(SummaryOrderPolicy.FastestToSlowest)]
 [CPUUsageDiagnoser]
-public class ResidualNodeBenchmarks
+public class FinalNormNodeBenchmarks
 {
     private BitNetMemoryManager? memoryManager;
     private BitNetModel? model;
     private BitNetSession? session;
-    private ResidualNode? cpuSingleThreadNode;
-    private ResidualNode? cpuMultiThreadNode;
-    private ResidualNode? tensorSingleThreadNode;
-    private ResidualNode? tensorMultiThreadNode;
-    private ResidualNode? simdSingleThreadNode;
-    private ResidualNode? simdMultiThreadNode;
+    private FinalNormNode? cpuSingleThreadNode;
+    private FinalNormNode? cpuMultiThreadNode;
+    private FinalNormNode? tensorSingleThreadNode;
+    private FinalNormNode? tensorMultiThreadNode;
+    private FinalNormNode? simdSingleThreadNode;
+    private FinalNormNode? simdMultiThreadNode;
 
     [GlobalSetup]
     public void GlobalSetup()
@@ -36,8 +35,7 @@ public class ResidualNodeBenchmarks
             Tokens = new[] { 0 },
             CurrentToken = 0,
         };
-        BenchmarkDataHelper.FillDeterministicValues(session.Embedding.Span, 37);
-        BenchmarkDataHelper.FillDeterministicValues(session.AttentionOutput.Span, 41);
+        BenchmarkDataHelper.FillDeterministicValues(session.Embedding.Span, 17);
 
         cpuSingleThreadNode = CreateNode(InferenceBackend.CPU, 1);
         cpuMultiThreadNode = CreateNode(InferenceBackend.CPU, InferenceConfig.AutoThreadCount);
@@ -67,49 +65,53 @@ public class ResidualNodeBenchmarks
     }
 
     [Benchmark(Baseline = true)]
-    public Memory<float> Residual_CPU_SingleThread() => Run(cpuSingleThreadNode!);
+    public Memory<float> FinalNorm_CPU_SingleThread() => Run(cpuSingleThreadNode!);
 
     [Benchmark]
-    public Memory<float> Residual_CPU_MultiThread() => Run(cpuMultiThreadNode!);
+    public Memory<float> FinalNorm_CPU_MultiThread() => Run(cpuMultiThreadNode!);
 
     [Benchmark]
-    public Memory<float> Residual_Tensor_SingleThread() => Run(tensorSingleThreadNode!);
+    public Memory<float> FinalNorm_Tensor_SingleThread() => Run(tensorSingleThreadNode!);
 
     [Benchmark]
-    public Memory<float> Residual_Tensor_MultiThread() => Run(tensorMultiThreadNode!);
+    public Memory<float> FinalNorm_Tensor_MultiThread() => Run(tensorMultiThreadNode!);
 
     [Benchmark]
-    public Memory<float> Residual_SIMD_SingleThread()
+    public Memory<float> FinalNorm_SIMD_SingleThread()
     {
         if (simdSingleThreadNode is null)
         {
-            throw new PlatformNotSupportedException("Residual SIMD benchmark requires AVX2 support.");
+            throw new PlatformNotSupportedException("Final norm SIMD benchmark requires AVX2 support.");
         }
 
         return Run(simdSingleThreadNode);
     }
 
     [Benchmark]
-    public Memory<float> Residual_SIMD_MultiThread()
+    public Memory<float> FinalNorm_SIMD_MultiThread()
     {
         if (simdMultiThreadNode is null)
         {
-            throw new PlatformNotSupportedException("Residual SIMD benchmark requires AVX2 support.");
+            throw new PlatformNotSupportedException("Final norm SIMD benchmark requires AVX2 support.");
         }
 
         return Run(simdMultiThreadNode);
     }
 
-    private ResidualNode CreateNode(InferenceBackend backend, int threadCount)
+    private FinalNormNode CreateNode(InferenceBackend backend, int threadCount)
     {
-        var node = new ResidualNode(model!, new InferenceConfig(backend, threadCount));
+        var node = new FinalNormNode(
+            model!,
+            enableCache: true,
+            inferenceConfig: new InferenceConfig(backend, threadCount));
         node.Init();
         return node;
     }
 
-    private Memory<float> Run(ResidualNode node)
+    private Memory<float> Run(FinalNormNode node)
     {
         node.Forward(session!);
-        return session!.FeedForwardInput;
+        return session!.FinalNormOutput;
     }
+
 }

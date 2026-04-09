@@ -1,7 +1,6 @@
-using System;
 using System.Buffers;
 using System.Numerics.Tensors;
-using System.Threading.Tasks;
+using System.Runtime.InteropServices;
 
 namespace BitNetSharp.Core
 {
@@ -24,76 +23,7 @@ namespace BitNetSharp.Core
 
         public int ThreadCount { get; }
 
-        public void Add(ReadOnlyMemory<float> input, ReadOnlyMemory<float> addend, Memory<float> output, string operationName = "Add")
-        {
-            ExecuteAdd(input, addend, output);
-        }
-
-        public void ProjectBitNetI2(ReadOnlyMemory<float> input, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale, Memory<float> output, string operationName = "BitNet projection")
-        {
-            ExecuteProjectBitNetI2(input, packedWeights, outputLength, weightScale, output);
-        }
-
-        public void ProjectBitNetI2(ReadOnlyMemory<sbyte> quantizedValues, float activationScale, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale, Memory<float> output, string operationName = "BitNet projection")
-        {
-            ExecuteProjectBitNetI2(quantizedValues, activationScale, packedWeights, outputLength, weightScale, output);
-        }
-
-        public void ForwardSoftmax(ReadOnlySpan<float> input, Span<float> output, string operationName = "Softmax")
-        {
-            ExecuteForwardSoftmax(input, output);
-        }
-
-        public void ForwardRmsNorm(ReadOnlyMemory<float> input, ReadOnlyMemory<float> normWeights, float epsilon, Memory<float> output)
-        {
-            ExecuteForwardRmsNorm(input, normWeights, epsilon, output);
-        }
-
-        public void ForwardLmHead(ReadOnlyMemory<float> input, ReadOnlyMemory<Half> embeddingWeights, int rowLength, int vocabularySize, Memory<float> output)
-        {
-            ValidationHelper.ValidateLmHeadArguments(input, rowLength, vocabularySize, output);
-
-            Span<float> outputSpan = output.Span[..vocabularySize];
-            if (ThreadCount == 1 || vocabularySize <= 1)
-            {
-                using IMemoryOwner<float> rowOwner = MemoryPool<float>.Shared.Rent(rowLength);
-                ProjectLmHeadRange(input.Span, embeddingWeights.Span, rowLength, outputSpan, 0, vocabularySize, rowOwner.Memory.Span[..rowLength]);
-                return;
-            }
-
-            float[] inputBuffer = input.ToArray();
-            Half[] embeddingWeightsBuffer = embeddingWeights.ToArray();
-            float[] outputBuffer = new float[vocabularySize];
-            ThreadHelper.ForEachRange(
-                outputBuffer.AsSpan(),
-                (startIndex, endIndex) =>
-                {
-                    using IMemoryOwner<float> rowOwner = MemoryPool<float>.Shared.Rent(rowLength);
-                    ProjectLmHeadRange(inputBuffer, embeddingWeightsBuffer, rowLength, outputBuffer, startIndex, endIndex, rowOwner.Memory.Span[..rowLength]);
-                },
-                ThreadCount);
-            outputBuffer.AsSpan().CopyTo(outputSpan);
-        }
-
-        private void ExecuteForwardRmsNorm(ReadOnlyMemory<float> input, ReadOnlyMemory<float> normWeights, float epsilon, Memory<float> output)
-        {
-            ReadOnlySpan<float> inputSpan = input.Span;
-            ReadOnlySpan<float> normWeightsSpan = normWeights.Span;
-            Span<float> outputSpan = output.Span;
-            ValidationHelper.ValidateRmsNormDestination(inputSpan, normWeightsSpan, outputSpan);
-
-            float inverseRootMeanSquare = ComputeRmsNormInverseRootMeanSquare(input, epsilon, ThreadCount);
-            if (ThreadCount == 1 || input.Length <= 1)
-            {
-                FillRmsNormRange(inputSpan, normWeightsSpan, inverseRootMeanSquare, outputSpan, 0, input.Length);
-                return;
-            }
-
-            ThreadHelper.ForEachRange(input.Length, (startIndex, endIndex) =>
-                FillRmsNormRange(input.Span, normWeights.Span, inverseRootMeanSquare, output.Span, startIndex, endIndex), ThreadCount);
-        }
-
-        private void ExecuteAdd(ReadOnlyMemory<float> input, ReadOnlyMemory<float> addend, Memory<float> output)
+        public void Add(ReadOnlyMemory<float> input, ReadOnlyMemory<float> addend, Memory<float> output)
         {
             ReadOnlySpan<float> inputSpan = input.Span;
             ReadOnlySpan<float> addendSpan = addend.Span;
@@ -102,15 +32,67 @@ namespace BitNetSharp.Core
 
             if (ThreadCount == 1 || input.Length <= 1)
             {
-                FillAddRange(inputSpan, addendSpan, outputSpan, 0, input.Length);
+                FillAddRange(inputSpan, addendSpan, outputSpan);
                 return;
             }
 
             ThreadHelper.ForEachRange(input.Length, (startIndex, endIndex) =>
-                FillAddRange(input.Span, addend.Span, output.Span, startIndex, endIndex), ThreadCount);
+                FillAddRange(
+                    input.Span.Slice(startIndex, endIndex - startIndex),
+                    addend.Span.Slice(startIndex, endIndex - startIndex),
+                    output.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount);
         }
 
-        private void ExecuteForwardSoftmax(ReadOnlySpan<float> input, Span<float> output)
+        public void ProjectBitNetI2(ReadOnlyMemory<float> input, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale, Memory<float> output)
+        {
+            ValidationHelper.ValidateBitNetProjectionArguments(input.Span, packedWeights.Span, outputLength);
+            ValidationHelper.ValidateProjectionDestination(outputLength, output.Span);
+
+            using IMemoryOwner<sbyte> quantizedValuesRawOwner = MemoryPool<sbyte>.Shared.Rent(input.Length);
+            Memory<sbyte> quantizedValuesRaw = quantizedValuesRawOwner.Memory[..input.Length];
+            (float activationScale, _) = QuantizeBitNetActivations(input, quantizedValuesRaw, ThreadCount);
+            ProjectBitNetI2(quantizedValuesRaw, activationScale, packedWeights, outputLength, weightScale, output);
+        }
+
+        public void ProjectBitNetI2(ReadOnlyMemory<sbyte> quantizedValues, float activationScale, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale, Memory<float> output)
+        {
+            ValidationHelper.ValidateBitNetProjectionArguments(quantizedValues.Span, packedWeights.Span, outputLength);
+            Span<float> outputSpan = output.Span;
+            ValidationHelper.ValidateProjectionDestination(outputLength, outputSpan);
+
+            using IMemoryOwner<float> quantizedValuesOwner = MemoryPool<float>.Shared.Rent(quantizedValues.Length);
+            Memory<float> quantizedValuesSingle = quantizedValuesOwner.Memory[..quantizedValues.Length];
+            if (ThreadCount == 1 || quantizedValues.Length <= 1)
+            {
+                ConvertQuantizedValuesToSingle(quantizedValues.Span, quantizedValuesSingle.Span);
+            }
+            else
+            {
+                ThreadHelper.ForEachRange(quantizedValues.Length, (startIndex, endIndex) =>
+                    ConvertQuantizedValuesToSingle(
+                        quantizedValues.Span.Slice(startIndex, endIndex - startIndex),
+                        quantizedValuesSingle.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount, sizeof(sbyte));
+            }
+
+            // Each packed byte stores four 2-bit weights, so one output row uses inputLength / 4 bytes.
+            int packedRowByteCount = checked(quantizedValues.Length / 4);
+            if (ThreadCount == 1 || outputLength <= 1)
+            {
+                ProjectBitNetI2Range(quantizedValuesSingle.Span, packedWeights.Span, packedRowByteCount, activationScale, weightScale, outputSpan);
+                return;
+            }
+
+            ThreadHelper.ForEachRange(outputLength, (startIndex, endIndex) =>
+                ProjectBitNetI2Range(
+                    quantizedValuesSingle.Span,
+                    packedWeights.Span.Slice(startIndex * packedRowByteCount, (endIndex - startIndex) * packedRowByteCount),
+                    packedRowByteCount,
+                    activationScale,
+                    weightScale,
+                    output.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount);
+        }
+
+        public void ForwardSoftmax(ReadOnlySpan<float> input, Span<float> output)
         {
             ValidationHelper.ValidateSoftmaxDestination(input, output);
 
@@ -127,6 +109,55 @@ namespace BitNetSharp.Core
             input.CopyTo(inputMemory.Span);
             ExecuteForwardSoftmaxMemory(inputMemory, outputMemory);
             outputMemory.Span.CopyTo(output);
+        }
+
+        public void ForwardRmsNorm(ReadOnlyMemory<float> input, ReadOnlyMemory<float> normWeights, float epsilon, Memory<float> output)
+        {
+            ReadOnlySpan<float> inputSpan = input.Span;
+            ReadOnlySpan<float> normWeightsSpan = normWeights.Span;
+            Span<float> outputSpan = output.Span;
+            ValidationHelper.ValidateRmsNormDestination(inputSpan, normWeightsSpan, outputSpan);
+
+            float inverseRootMeanSquare = ComputeRmsNormInverseRootMeanSquare(input, epsilon, ThreadCount);
+            if (ThreadCount == 1 || input.Length <= 1)
+            {
+                FillRmsNormRange(inputSpan, normWeightsSpan, inverseRootMeanSquare, outputSpan);
+                return;
+            }
+
+            ThreadHelper.ForEachRange(input.Length, (startIndex, endIndex) =>
+                FillRmsNormRange(
+                    input.Span.Slice(startIndex, endIndex - startIndex),
+                    normWeights.Span.Slice(startIndex, endIndex - startIndex),
+                    inverseRootMeanSquare,
+                    output.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount);
+        }
+
+        public void ForwardLmHead(ReadOnlyMemory<float> input, ReadOnlyMemory<byte> embeddingWeights, int rowLength, int vocabularySize, Memory<float> output)
+        {
+            ValidationHelper.ValidateLmHeadArguments(input, embeddingWeights, rowLength, vocabularySize, output);
+            ReadOnlySpan<Half> embeddingWeightsSpan = MemoryMarshal.Cast<byte, Half>(embeddingWeights.Span);
+
+            if (ThreadCount == 1 || vocabularySize <= 1)
+            {
+                using IMemoryOwner<float> rowOwner = MemoryPool<float>.Shared.Rent(rowLength);
+                ProjectLmHeadRange(input.Span, embeddingWeightsSpan, rowLength, output.Span[..vocabularySize], rowOwner.Memory.Span[..rowLength]);
+                return;
+            }
+
+            ThreadHelper.ForEachRange(
+                vocabularySize,
+                (startIndex, endIndex) =>
+                {
+                    using IMemoryOwner<float> rowOwner = MemoryPool<float>.Shared.Rent(rowLength);
+                    ProjectLmHeadRange(
+                        input.Span,
+                        MemoryMarshal.Cast<byte, Half>(embeddingWeights.Span.Slice(startIndex * rowLength * sizeof(ushort), (endIndex - startIndex) * rowLength * sizeof(ushort))),
+                        rowLength,
+                        output.Span.Slice(startIndex, endIndex - startIndex),
+                        rowOwner.Memory.Span[..rowLength]);
+                },
+                ThreadCount);
         }
 
         private void ExecuteForwardSoftmaxMemory(ReadOnlyMemory<float> input, Memory<float> output)
@@ -193,47 +224,6 @@ namespace BitNetSharp.Core
             }, ThreadCount);
         }
 
-        private void ExecuteProjectBitNetI2(ReadOnlyMemory<float> input, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale, Memory<float> output)
-        {
-            ValidationHelper.ValidateBitNetProjectionArguments(input.Span, packedWeights.Span, outputLength);
-            ValidationHelper.ValidateProjectionDestination(outputLength, output.Span);
-
-            using IMemoryOwner<sbyte> quantizedValuesRawOwner = MemoryPool<sbyte>.Shared.Rent(input.Length);
-            Memory<sbyte> quantizedValuesRaw = quantizedValuesRawOwner.Memory[..input.Length];
-            (float activationScale, _) = QuantizeBitNetActivations(input, quantizedValuesRaw, ThreadCount);
-            ExecuteProjectBitNetI2(quantizedValuesRaw, activationScale, packedWeights, outputLength, weightScale, output);
-        }
-
-        private void ExecuteProjectBitNetI2(ReadOnlyMemory<sbyte> quantizedValuesRaw, float activationScale, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale, Memory<float> output)
-        {
-            ValidationHelper.ValidateBitNetProjectionArguments(quantizedValuesRaw.Span, packedWeights.Span, outputLength);
-            Span<float> outputSpan = output.Span;
-            ValidationHelper.ValidateProjectionDestination(outputLength, outputSpan);
-
-            using IMemoryOwner<float> quantizedValuesOwner = MemoryPool<float>.Shared.Rent(quantizedValuesRaw.Length);
-            Memory<float> quantizedValues = quantizedValuesOwner.Memory[..quantizedValuesRaw.Length];
-            if (ThreadCount == 1 || quantizedValuesRaw.Length <= 1)
-            {
-                ConvertQuantizedValuesToSingle(quantizedValuesRaw.Span, quantizedValues.Span, 0, quantizedValuesRaw.Length);
-            }
-            else
-            {
-                ThreadHelper.ForEachRange(quantizedValuesRaw.Length, (startIndex, endIndex) =>
-                    ConvertQuantizedValuesToSingle(quantizedValuesRaw.Span, quantizedValues.Span, startIndex, endIndex), ThreadCount, sizeof(sbyte));
-            }
-
-            // Each packed byte stores four 2-bit weights, so one output row uses inputLength / 4 bytes.
-            int packedRowByteCount = checked(quantizedValuesRaw.Length / 4);
-            if (ThreadCount == 1 || outputLength <= 1)
-            {
-                ProjectBitNetI2Range(quantizedValues.Span, packedWeights.Span, packedRowByteCount, activationScale, weightScale, outputSpan, 0, outputLength);
-                return;
-            }
-
-            ThreadHelper.ForEachRange(outputLength, (startIndex, endIndex) =>
-                ProjectBitNetI2Range(quantizedValues.Span, packedWeights.Span, packedRowByteCount, activationScale, weightScale, output.Span, startIndex, endIndex), ThreadCount);
-        }
-
         private static void ForwardSoftmaxCore(ReadOnlySpan<float> input, Span<float> output)
         {
             float maxValue = TensorPrimitives.Max(input);
@@ -250,11 +240,10 @@ namespace BitNetSharp.Core
             }
         }
 
-        private static void FillRmsNormRange(ReadOnlySpan<float> input, ReadOnlySpan<float> normWeights, float inverseRootMeanSquare, Span<float> output, int startIndex, int endIndex)
+        private static void FillRmsNormRange(ReadOnlySpan<float> input, ReadOnlySpan<float> normWeights, float inverseRootMeanSquare, Span<float> output)
         {
-            Span<float> outputRange = output.Slice(startIndex, endIndex - startIndex);
-            TensorPrimitives.Multiply(input.Slice(startIndex, endIndex - startIndex), inverseRootMeanSquare, outputRange);
-            TensorPrimitives.Multiply(outputRange, normWeights.Slice(startIndex, endIndex - startIndex), outputRange);
+            TensorPrimitives.Multiply(input, inverseRootMeanSquare, output);
+            TensorPrimitives.Multiply(output, normWeights, output);
         }
 
         private static float ComputeRmsNormInverseRootMeanSquare(ReadOnlyMemory<float> input, float epsilon, int threadCount)
@@ -295,16 +284,16 @@ namespace BitNetSharp.Core
             return 1f / MathF.Sqrt(meanSquare + epsilon);
         }
 
-        private static void FillAddRange(ReadOnlySpan<float> input, ReadOnlySpan<float> addend, Span<float> output, int startIndex, int endIndex)
+        private static void FillAddRange(ReadOnlySpan<float> input, ReadOnlySpan<float> addend, Span<float> output)
         {
-            TensorPrimitives.Add(input.Slice(startIndex, endIndex - startIndex), addend.Slice(startIndex, endIndex - startIndex), output.Slice(startIndex, endIndex - startIndex));
+            TensorPrimitives.Add(input, addend, output);
         }
 
-        private static void ProjectBitNetI2Range(ReadOnlySpan<float> quantizedValues, ReadOnlySpan<byte> packedWeights, int packedRowByteCount, float activationScale, float weightScale, Span<float> output, int startIndex, int endIndex)
+        private static void ProjectBitNetI2Range(ReadOnlySpan<float> quantizedValues, ReadOnlySpan<byte> packedWeights, int packedRowByteCount, float activationScale, float weightScale, Span<float> output)
         {
             using IMemoryOwner<float> rowWeightsOwner = MemoryPool<float>.Shared.Rent(quantizedValues.Length);
             Span<float> rowWeights = rowWeightsOwner.Memory.Span[..quantizedValues.Length];
-            for (int outputIndex = startIndex; outputIndex < endIndex; outputIndex++)
+            for (int outputIndex = 0; outputIndex < output.Length; outputIndex++)
             {
                 ReadOnlySpan<byte> packedRow = packedWeights.Slice(outputIndex * packedRowByteCount, packedRowByteCount);
                 rowWeights.Clear();
@@ -315,9 +304,9 @@ namespace BitNetSharp.Core
             }
         }
 
-        private static void ProjectLmHeadRange(ReadOnlySpan<float> input, ReadOnlySpan<Half> embeddingWeights, int rowLength, Span<float> output, int startIndex, int endIndex, Span<float> rowBuffer)
+        private static void ProjectLmHeadRange(ReadOnlySpan<float> input, ReadOnlySpan<Half> embeddingWeights, int rowLength, Span<float> output, Span<float> rowBuffer)
         {
-            for (int outputIndex = startIndex; outputIndex < endIndex; outputIndex++)
+            for (int outputIndex = 0; outputIndex < output.Length; outputIndex++)
             {
                 int rowOffset = outputIndex * rowLength;
                 ConvertHalfToSingle(embeddingWeights.Slice(rowOffset, rowLength), rowBuffer);
@@ -333,9 +322,9 @@ namespace BitNetSharp.Core
             }
         }
 
-        private static void ConvertQuantizedValuesToSingle(ReadOnlySpan<sbyte> source, Span<float> destination, int startIndex, int endIndex)
+        private static void ConvertQuantizedValuesToSingle(ReadOnlySpan<sbyte> source, Span<float> destination)
         {
-            for (int index = startIndex; index < endIndex; index++)
+            for (int index = 0; index < source.Length; index++)
             {
                 destination[index] = source[index];
             }
@@ -393,7 +382,9 @@ namespace BitNetSharp.Core
                 ReadOnlySpan<float> inputRange = input.Span.Slice(range.StartIndex, range.EndIndex - range.StartIndex);
                 Span<float> scaledRange = scaledValuesMemory.Span.Slice(range.StartIndex, range.EndIndex - range.StartIndex);
                 TensorPrimitives.Multiply(inputRange, activationScale, scaledRange);
-                partialSums[rangeIndex] = QuantizeScaledValuesRange(scaledRange, quantizedValues.Span, range.StartIndex);
+                partialSums[rangeIndex] = QuantizeScaledValuesRange(
+                    scaledRange,
+                    quantizedValues.Span.Slice(range.StartIndex, range.EndIndex - range.StartIndex));
             });
 
             int activationSum = 0;
@@ -431,14 +422,14 @@ namespace BitNetSharp.Core
             return (activationScale, activationSum);
         }
 
-        private static int QuantizeScaledValuesRange(ReadOnlySpan<float> scaledValues, Span<sbyte> quantizedValues, int startIndex)
+        private static int QuantizeScaledValuesRange(ReadOnlySpan<float> scaledValues, Span<sbyte> quantizedValues)
         {
             int activationSum = 0;
             for (int index = 0; index < scaledValues.Length; index++)
             {
                 int quantizedValue = (int)MathF.Round(scaledValues[index], MidpointRounding.ToEven);
                 quantizedValue = Math.Clamp(quantizedValue, sbyte.MinValue, sbyte.MaxValue);
-                quantizedValues[startIndex + index] = (sbyte)quantizedValue;
+                quantizedValues[index] = (sbyte)quantizedValue;
                 activationSum += quantizedValue;
             }
 

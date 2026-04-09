@@ -1,5 +1,4 @@
 using GGUFSharp;
-using System.Collections.Generic;
 
 namespace BitNetSharp.Models
 {

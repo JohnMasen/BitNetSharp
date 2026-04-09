@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-
 namespace BitNetSharp.Models
 {
     public sealed record BitNetTokenizerConfig(

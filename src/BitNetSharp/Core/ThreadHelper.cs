@@ -1,8 +1,5 @@
-using System;
-using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Threading.Tasks;
 
 namespace BitNetSharp.Core
 {
@@ -37,7 +34,7 @@ namespace BitNetSharp.Core
         internal static void ForEachRange<T>(ReadOnlySpan<T> items, Action<int, int> rangeAction, int threadCount = 0, int? alignmentByteLength = null)
             where T : unmanaged
         {
-            
+
             ForEachRange(items.Length, rangeAction, threadCount, Unsafe.SizeOf<T>(), alignmentByteLength);
         }
 

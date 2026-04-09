@@ -1,4 +1,3 @@
-using System;
 using System.Runtime.CompilerServices;
 
 namespace BitNetSharp.Core
@@ -6,11 +5,17 @@ namespace BitNetSharp.Core
     internal static class ValidationHelper
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static void ValidateLmHeadArguments(ReadOnlyMemory<float> input, int rowLength, int vocabularySize, Memory<float> output)
+        internal static void ValidateLmHeadArguments(ReadOnlyMemory<float> input, ReadOnlyMemory<byte> embeddingWeights, int rowLength, int vocabularySize, Memory<float> output)
         {
             if (input.Length != rowLength)
             {
                 throw new ArgumentException("Input length does not match the model embedding length.", nameof(input));
+            }
+
+            int requiredWeightByteCount = checked(rowLength * vocabularySize * sizeof(ushort));
+            if (embeddingWeights.Length < requiredWeightByteCount)
+            {
+                throw new ArgumentException("Embedding weights length does not match the LM head tensor size.", nameof(embeddingWeights));
             }
 
             if (output.Length < vocabularySize)

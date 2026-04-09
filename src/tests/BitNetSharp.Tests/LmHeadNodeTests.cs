@@ -66,6 +66,25 @@ namespace BitNetSharp.Tests
         }
 
         [TestMethod]
+        public void LmHead_CPU_MultiThreadMatchesSingleThread()
+        {
+            VerifyLmHeadMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.CPU);
+        }
+
+        [TestMethod]
+        public void LmHead_Tensor_MultiThreadMatchesSingleThread()
+        {
+            VerifyLmHeadMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.Tensor);
+        }
+
+        [TestMethod]
+        public void LmHead_SIMD_MultiThreadMatchesSingleThread()
+        {
+            EnsureAvxSupported();
+            VerifyLmHeadMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.SIMD);
+        }
+
+        [TestMethod]
         public void LmHead_Cache_MatchesUncachedReads()
         {
             using var model = TestModelFactory.LoadModel();
@@ -124,6 +143,29 @@ namespace BitNetSharp.Tests
             node.Forward(session);
 
             AssertFloatArraysAreClose(testCase.LmHead.Logits, session.Logits.Span.ToArray(), 1e-2f, $"token {testCase.TokenId} ({testCase.TokenText})");
+        }
+
+        private static void VerifyLmHeadMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend backend)
+        {
+            using var model = TestModelFactory.LoadModel();
+            LmHeadCase testCase = GetLmHeadCase(DebugCaseIndex);
+            var singleThreadNode = new BitNetSharp.Nodes.LmHeadNode(
+                model,
+                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
+            var multiThreadNode = new BitNetSharp.Nodes.LmHeadNode(
+                model,
+                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 2));
+            var singleThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
+            var multiThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
+            testCase.FinalNormOutput.Values.CopyTo(singleThreadSession.FinalNormOutput.Span);
+            testCase.FinalNormOutput.Values.CopyTo(multiThreadSession.FinalNormOutput.Span);
+
+            singleThreadNode.Init();
+            multiThreadNode.Init();
+            singleThreadNode.Forward(singleThreadSession);
+            multiThreadNode.Forward(multiThreadSession);
+
+            AssertFloatArraysAreClose(singleThreadSession.Logits.Span.ToArray(), multiThreadSession.Logits.Span.ToArray(), 1e-2f, $"{backend} lm-head threading");
         }
 
         private static LmHeadVectorsDocument LoadLmHeadVectorsDocument()
