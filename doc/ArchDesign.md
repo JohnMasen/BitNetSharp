@@ -98,20 +98,20 @@
 
 `BitNet` 的低比特特性主要放在这一层，而不是放在步骤调度层。
 
-### 2.6 Layer 推理配置约定
+### 2.6 Node 推理配置约定
 
-当前各个 layer 构造函数统一接收可选的 `InferenceConfig`。
+当前各个 node 构造函数统一接收可选的 `InferenceConfig`。
 
 - `InferenceConfig` 只包含 `Backend` 与 `ThreadCount`
-- 该配置会以只读属性形式暴露在 layer 上
-- 如果构造时传入 `null`，layer 会按各自默认策略创建一个新的默认配置实例
+- 该配置会以只读属性形式暴露在 node 上
+- 如果构造时传入 `null`，node 会按各自默认策略创建一个新的默认配置实例
 - 运行时始终读取该只读属性，不再额外推断计算后端或线程数
 
 当前默认策略：
 
-- `EmbeddingLayer`：`CPU` + 单线程
-- `RmsNormLayer`：`SIMD` + 单线程
-- `QKVProjectionLayer`：`SIMD` + 自动线程数
+- `EmbeddingNode`：`CPU` + 单线程
+- `RmsNormNode`：`SIMD` + 单线程
+- `QKVProjectionNode`：`SIMD` + 自动线程数
 
 ---
 
@@ -397,7 +397,7 @@
 
 - `Logits`
 
-### 6.6 `SamplingStep`
+### 6.6 `SamplingNode`
 
 职责：
 
@@ -440,7 +440,7 @@
 建议结构：
 
 - 对每一层创建或复用当前层视图
-- 设置当前 layer index
+- 设置当前 node index
 - 调用 `LayerPipelineStep`
 
 每一层由两个大块组成：
@@ -844,7 +844,7 @@ inpL
     - `...`
   - `FinalNormStep`
   - `LmHeadStep`
-  - `SamplingStep`
+  - `SamplingNode`
   - `SessionCommitStep`
 
 ---
@@ -1003,7 +1003,7 @@ inpL
 - `TransformerStackStep`
 - `FinalNormStep`
 - `LmHeadStep`
-- `SamplingStep`
+- `SamplingNode`
 - `SessionCommitStep`
 
 ### 每层

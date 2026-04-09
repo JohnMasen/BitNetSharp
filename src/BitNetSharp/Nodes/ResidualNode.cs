@@ -1,0 +1,104 @@
+using BitNetSharp.Core;
+using BitNetSharp.Models;
+using System;
+
+namespace BitNetSharp.Nodes
+{
+    /// <summary>
+    /// Adds the current hidden state and the attention output to produce the feed-forward input stored on a <see cref="BitNetSession"/>.
+    /// Call <see cref="Init"/> before invoking <see cref="Forward(BitNetSession)"/>.
+    /// </summary>
+    public sealed class ResidualNode
+    {
+        private readonly BitNetModel model;
+        private readonly IOPProvider2 opProvider;
+        private bool isInitialized;
+
+        public ResidualNode(BitNetModel model, global::BitNetSharp.Nodes.InferenceConfig? inferenceConfig = null)
+        {
+            ArgumentNullException.ThrowIfNull(model);
+
+            if (model.Config is null)
+            {
+                throw new InvalidOperationException("The model must be loaded before the residual node can be created.");
+            }
+
+            this.model = model;
+            InferenceConfig = inferenceConfig ?? CreateDefaultInferenceConfig();
+            opProvider = InferenceConfig.Backend switch
+            {
+                global::BitNetSharp.Nodes.InferenceBackend.CPU => new CPUDefaultOPProvider(InferenceConfig.ThreadCount),
+                global::BitNetSharp.Nodes.InferenceBackend.Tensor => new CPUTensorOPProvider(InferenceConfig.ThreadCount),
+                global::BitNetSharp.Nodes.InferenceBackend.SIMD => new CPUSimdOPProvider(InferenceConfig.ThreadCount),
+                _ => throw new NotSupportedException($"Backend '{InferenceConfig.Backend}' is not implemented yet."),
+            };
+        }
+
+        public global::BitNetSharp.Nodes.InferenceConfig InferenceConfig { get; }
+
+        public void Init()
+        {
+            isInitialized = true;
+        }
+
+        private static global::BitNetSharp.Nodes.InferenceConfig CreateDefaultInferenceConfig()
+        {
+            return new global::BitNetSharp.Nodes.InferenceConfig(global::BitNetSharp.Nodes.InferenceBackend.CPU, 1);
+        }
+
+        /// <summary>
+        /// Adds the session embedding and attention output buffers into the feed-forward input buffer.
+        /// </summary>
+        public void Forward(BitNetSession session)
+        {
+            ArgumentNullException.ThrowIfNull(session);
+            EnsureInitialized();
+
+            if (!ReferenceEquals(session.Model, model))
+            {
+                throw new InvalidOperationException("The session was created for a different model instance.");
+            }
+
+            if (!session.HasMemory<float>(BitNetSession.EmbeddingKey))
+            {
+                throw new InvalidOperationException("Session does not contain embedding output.");
+            }
+
+            if (!session.HasMemory<float>(BitNetSession.AttentionOutputKey))
+            {
+                throw new InvalidOperationException("Session does not contain attention output.");
+            }
+
+            ForwardCore(session.Embedding, session.AttentionOutput, session.FeedForwardInput);
+        }
+
+        private void ForwardCore(ReadOnlyMemory<float> input, ReadOnlyMemory<float> residual, Memory<float> output)
+        {
+            int embeddingLength = checked((int)model.Config!.EmbeddingLength);
+            if (input.Length != embeddingLength)
+            {
+                throw new ArgumentException("Residual input length does not match the model embedding length.", nameof(input));
+            }
+
+            if (residual.Length != embeddingLength)
+            {
+                throw new ArgumentException("Residual source length does not match the model embedding length.", nameof(residual));
+            }
+
+            if (output.Length < embeddingLength)
+            {
+                throw new ArgumentException("Residual output length does not match the model embedding length.", nameof(output));
+            }
+
+            opProvider.Add(input, residual, output[..embeddingLength], "Residual");
+        }
+
+        private void EnsureInitialized()
+        {
+            if (!isInitialized)
+            {
+                throw new InvalidOperationException("The node must be initialized by calling Init before Forward.");
+            }
+        }
+    }
+}

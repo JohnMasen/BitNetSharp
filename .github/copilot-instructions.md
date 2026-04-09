@@ -17,6 +17,16 @@
 - Simple scalar values such as `CurrentToken` should be ordinary properties and not be managed by `BitNetMemoryManager`, which should be reserved for large memory blocks.
 - Defer implementing true multi-token KV-cache/runtime work in this repo until after the single-token inference pipeline is fully working end-to-end.
 - Keep `doc/ImplementProgress.md` updated whenever layers or their test files are added or changed.
+- For this repo's runtime design, do not introduce `IRuntimeNode`. Keep `RuntimeGraph` layer-only, and handle any non-layer operations by intercepting calls inside `Runtime` during execution instead of modeling them as graph nodes.
+- For this repo's runtime graph design, do not use DI to instantiate layers from graph deserialization. DI is not intended as the graph-deserialization mechanism here.
+- For this repo's runtime architecture, prefer `Layer` types to have parameterless constructors so they can be safely dynamically instantiated and deserialized from graph definitions.
+- Prefer `BitNetRuntime` itself to act as the layer-wrapping factory for logging and performance-monitoring wrappers, keeping wrappers scoped to runtime-only observability rather than general runtime capabilities.
+- For this repo's runtime roadmap, do not implement aggregated/fused layers yet. Treat layer aggregation as a future optimization path, especially for SIMD/GPU backends, and prefer a future `GraphOptimizer` to analyze and rewrite the layer-only graph for performance.
+- Treat `SamplingStep` as a `Layer` so `BitNetRuntime` stays model-agnostic; the graph should ultimately output a string. Prefer exposing configurable layer properties through layer-level attributes rather than a runtime-wide property bag unless a later cross-layer need proves necessary.
+- For this repo's memory tracking design, do not implement versioning yet. Prefer a non-generic `MemoryOwner` base abstraction that exposes `BeginTrace` and `EndTrace` to record read/write requests during a traced interval, leaving future extension points for version management and other metadata.
+- For this repo's memory abstraction, treat `IMemoryOwner` as a minimal disposable ownership object and place the primary design emphasis on `IMemoryView<T>` as the key typed access abstraction.
+- Simplify `MemoryManager` around two core purposes: shared memory management for multiple inference sessions, and serving as the destination for model weight loading. Keep `MemoryManager` as the base abstraction with a concrete built-in host-memory implementation, avoiding naming that concrete type as `DefaultMemoryManager`; prefer a name that describes its semantics rather than 'defaultness'.
+- Remove `CPUBaseOPProvider`; nodes should instantiate the concrete operation provider directly from configuration instead of using a shared base provider abstraction.
 
 ## QKV Parallel Work Instructions
 - For QKV parallel work, `ThreadHelper` should support optional block-aligned splitting. Default splitting should not enforce alignment; only SIMD callers should pass an alignment parameter based on the required data byte length.
