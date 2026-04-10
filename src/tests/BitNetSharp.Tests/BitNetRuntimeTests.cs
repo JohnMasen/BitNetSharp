@@ -23,7 +23,7 @@ namespace BitNetSharp.Tests
         {
             using var model = TestModelFactory.LoadModel();
             using var runtimeMemoryManager = new BitNetMemoryManager();
-            var inferenceConfig = new Nodes.InferenceConfig(Nodes.InferenceBackend.CPU, 1);
+            var inferenceConfig = TestInferenceConfigs.Cpu(1);
             using var runtime = new BitNetRuntime(model, runtimeMemoryManager, inferenceConfig);
 
             string actual = runtime.Inference(0);
@@ -38,7 +38,7 @@ namespace BitNetSharp.Tests
         {
             using var model = TestModelFactory.LoadModel();
             using var memoryManager = new BitNetMemoryManager();
-            using var runtime = new BitNetRuntime(model, memoryManager, new Nodes.InferenceConfig(Nodes.InferenceBackend.CPU, 1));
+            using var runtime = new BitNetRuntime(model, memoryManager, TestInferenceConfigs.Cpu(1));
             RuntimeCase testCase = GetRuntimeCase(caseIndex);
 
             string actual = runtime.Inference(testCase.TokenId);
@@ -52,7 +52,7 @@ namespace BitNetSharp.Tests
         {
             using var model = TestModelFactory.LoadModel();
             using var memoryManager = new BitNetMemoryManager();
-            using var runtime = new BitNetRuntime(model, memoryManager, new Nodes.InferenceConfig(Nodes.InferenceBackend.CPU, 1));
+            using var runtime = new BitNetRuntime(model, memoryManager, TestInferenceConfigs.Cpu(1));
 
             Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => runtime.Inference((int)model.Config!.VocabularySize));
         }
@@ -66,7 +66,7 @@ namespace BitNetSharp.Tests
                 CurrentToken = tokenId,
             };
 
-            var embeddingNode = new global::BitNetSharp.Nodes.EmbeddingNode(model, enableCache: true, inferenceConfig: new global::BitNetSharp.Nodes.InferenceConfig(global::BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+            var embeddingNode = new global::BitNetSharp.Nodes.EmbeddingNode(model, enableCache: true, inferenceConfig: TestInferenceConfigs.Cpu(1));
             IOPProvider opProvider = CreateOpProvider(inferenceConfig);
             embeddingNode.Init();
             embeddingNode.Forward(session);
@@ -128,13 +128,7 @@ namespace BitNetSharp.Tests
 
         private static IOPProvider CreateOpProvider(global::BitNetSharp.Nodes.InferenceConfig inferenceConfig)
         {
-            return inferenceConfig.Backend switch
-            {
-                Nodes.InferenceBackend.CPU => new CPUDefaultOPProvider(inferenceConfig.ThreadCount),
-                Nodes.InferenceBackend.Tensor => new CPUTensorOPProvider(inferenceConfig.ThreadCount),
-                Nodes.InferenceBackend.SIMD => new CPUSimdOPProvider(inferenceConfig.ThreadCount),
-                _ => throw new NotSupportedException($"Backend '{inferenceConfig.Backend}' is not implemented yet."),
-            };
+            return inferenceConfig.OPProvider;
         }
 
         private static void ExecuteQKVProjection(global::BitNetSharp.Models.BitNetModel model, BitNetSession session, IOPProvider opProvider, global::BitNetSharp.Models.BitNetLayerDefinition layer)

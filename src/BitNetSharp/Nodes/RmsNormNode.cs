@@ -22,6 +22,7 @@ namespace BitNetSharp.Nodes
         {
             ArgumentNullException.ThrowIfNull(model);
             ArgumentNullException.ThrowIfNull(normTensor);
+            ArgumentNullException.ThrowIfNull(inferenceConfig);
 
             if (model.Config is null)
             {
@@ -31,14 +32,8 @@ namespace BitNetSharp.Nodes
             this.model = model;
             this.normTensor = normTensor;
             EnableCache = enableCache;
-            InferenceConfig = inferenceConfig ?? CreateDefaultInferenceConfig();
-            opProvider = InferenceConfig.Backend switch
-            {
-                Nodes.InferenceBackend.CPU => new CPUDefaultOPProvider(InferenceConfig.ThreadCount),
-                Nodes.InferenceBackend.Tensor => new CPUTensorOPProvider(InferenceConfig.ThreadCount),
-                Nodes.InferenceBackend.SIMD => new CPUSimdOPProvider(InferenceConfig.ThreadCount),
-                _ => throw new NotSupportedException($"Backend '{InferenceConfig.Backend}' is not implemented yet."),
-            };
+            InferenceConfig = inferenceConfig;
+            opProvider = InferenceConfig.OPProvider;
 
             ValidateTensorShape();
             ValidateTensorType();
@@ -56,11 +51,6 @@ namespace BitNetSharp.Nodes
             }
 
             isInitialized = true;
-        }
-
-        private static Nodes.InferenceConfig CreateDefaultInferenceConfig()
-        {
-            return new Nodes.InferenceConfig(Nodes.InferenceBackend.SIMD, 1);
         }
 
         /// <summary>

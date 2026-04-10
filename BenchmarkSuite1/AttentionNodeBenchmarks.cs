@@ -37,14 +37,14 @@ public class AttentionNodeBenchmarks
         BenchmarkDataHelper.FillDeterministicValues(session.QKVQuery.Span, 23);
         BenchmarkDataHelper.FillDeterministicValues(session.QKVKey.Span, 29);
         BenchmarkDataHelper.FillDeterministicValues(session.QKVValue.Span, 31);
-        cpuSingleThreadNode = CreateNode(layerDefinition, InferenceBackend.CPU, 1);
-        cpuMultiThreadNode = CreateNode(layerDefinition, InferenceBackend.CPU, InferenceConfig.AutoThreadCount);
-        tensorSingleThreadNode = CreateNode(layerDefinition, InferenceBackend.Tensor, 1);
-        tensorMultiThreadNode = CreateNode(layerDefinition, InferenceBackend.Tensor, InferenceConfig.AutoThreadCount);
+        cpuSingleThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Cpu(1));
+        cpuMultiThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Cpu(InferenceConfig.AutoThreadCount));
+        tensorSingleThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Tensor(1));
+        tensorMultiThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Tensor(InferenceConfig.AutoThreadCount));
         if (Avx.IsSupported && Avx2.IsSupported)
         {
-            simdSingleThreadNode = CreateNode(layerDefinition, InferenceBackend.SIMD, 1);
-            simdMultiThreadNode = CreateNode(layerDefinition, InferenceBackend.SIMD, InferenceConfig.AutoThreadCount);
+            simdSingleThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Simd(1));
+            simdMultiThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Simd(InferenceConfig.AutoThreadCount));
         }
     }
 
@@ -98,7 +98,7 @@ public class AttentionNodeBenchmarks
         return Run(simdMultiThreadNode);
     }
 
-    private AttentionNode CreateNode(BitNetLayerDefinition layerDefinition, InferenceBackend backend, int threadCount)
+    private AttentionNode CreateNode(BitNetLayerDefinition layerDefinition, InferenceConfig inferenceConfig)
     {
         var node = new AttentionNode(
             model!,
@@ -107,7 +107,7 @@ public class AttentionNodeBenchmarks
             layerDefinition.AttentionOutputScale,
             layerDefinition.AttentionOutputBias,
             enableCache: true,
-            inferenceConfig: new InferenceConfig(backend, threadCount));
+            inferenceConfig: inferenceConfig);
         node.Init();
         return node;
     }

@@ -16,39 +16,35 @@ namespace BitNetSharp.Tests
         private static readonly Lazy<FeedForwardResidualVectorsDocument> FeedForwardResidualVectorsDocumentCache = new(LoadFeedForwardResidualVectorsDocument);
 
         [TestMethod]
-        public void FeedForwardResidual_DefaultConfig_CpuSingleThread()
+        public void FeedForwardResidual_ProvidedConfig_UsesConfiguredProvider()
         {
             using var model = TestModelFactory.LoadModel();
-            var node = new BitNetSharp.Nodes.FeedForwardResidualNode(model);
+            var node = new BitNetSharp.Nodes.FeedForwardResidualNode(model, TestInferenceConfigs.Cpu(1));
 
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceBackend.CPU, node.InferenceConfig.Backend);
+            Assert.AreEqual(TestInferenceConfigs.CpuBackend, node.InferenceConfig.Backend);
             Assert.AreEqual(1, node.InferenceConfig.ThreadCount);
         }
 
         [TestMethod]
-        public void FeedForwardResidual_NullConfig_CreatesNewInstance()
+        public void FeedForwardResidual_NullConfig_Throws()
         {
             using var model = TestModelFactory.LoadModel();
-            var firstNode = new BitNetSharp.Nodes.FeedForwardResidualNode(model, inferenceConfig: null);
-            var secondNode = new BitNetSharp.Nodes.FeedForwardResidualNode(model, inferenceConfig: null);
 
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceBackend.CPU, firstNode.InferenceConfig.Backend);
-            Assert.AreEqual(1, firstNode.InferenceConfig.ThreadCount);
-            Assert.AreNotSame(firstNode.InferenceConfig, secondNode.InferenceConfig);
+            Assert.ThrowsExactly<ArgumentNullException>(() => new BitNetSharp.Nodes.FeedForwardResidualNode(model, inferenceConfig: null));
         }
 
         [TestMethod]
         [DynamicData(nameof(GetFeedForwardResidualCaseIndices))]
         public void FeedForwardResidual_MatchesBaseline_CPU(int caseIndex)
         {
-            VerifyFeedForwardResidualMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.CPU);
+            VerifyFeedForwardResidualMatchesBaseline(caseIndex, TestInferenceConfigs.CpuBackend);
         }
 
         [TestMethod]
         [DynamicData(nameof(GetFeedForwardResidualCaseIndices))]
         public void FeedForwardResidual_MatchesBaseline_Tensor(int caseIndex)
         {
-            VerifyFeedForwardResidualMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.Tensor);
+            VerifyFeedForwardResidualMatchesBaseline(caseIndex, TestInferenceConfigs.TensorBackend);
         }
 
         [TestMethod]
@@ -56,26 +52,26 @@ namespace BitNetSharp.Tests
         public void FeedForwardResidual_MatchesBaseline_SIMD(int caseIndex)
         {
             EnsureSimdSupported();
-            VerifyFeedForwardResidualMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.SIMD);
+            VerifyFeedForwardResidualMatchesBaseline(caseIndex, TestInferenceConfigs.SimdBackend);
         }
 
         [TestMethod]
         public void FeedForwardResidual_CPU_MultiThreadMatchesSingleThread()
         {
-            VerifyFeedForwardResidualMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.CPU);
+            VerifyFeedForwardResidualMultiThreadMatchesSingleThread(TestInferenceConfigs.CpuBackend);
         }
 
         [TestMethod]
         public void FeedForwardResidual_Tensor_MultiThreadMatchesSingleThread()
         {
-            VerifyFeedForwardResidualMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.Tensor);
+            VerifyFeedForwardResidualMultiThreadMatchesSingleThread(TestInferenceConfigs.TensorBackend);
         }
 
         [TestMethod]
         public void FeedForwardResidual_SIMD_MultiThreadMatchesSingleThread()
         {
             EnsureSimdSupported();
-            VerifyFeedForwardResidualMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.SIMD);
+            VerifyFeedForwardResidualMultiThreadMatchesSingleThread(TestInferenceConfigs.SimdBackend);
         }
 
         [TestMethod]
@@ -85,7 +81,7 @@ namespace BitNetSharp.Tests
             FeedForwardResidualCase testCase = GetFeedForwardResidualCase(0);
             var node = new BitNetSharp.Nodes.FeedForwardResidualNode(
                 model,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: TestInferenceConfigs.Cpu(1));
             var session = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             testCase.FirstLayerFfn.FeedForwardInput.CopyTo(session.FeedForwardInput.Span);
             testCase.FirstLayerFfn.FeedForwardDown.CopyTo(session.FeedForwardOutput.Span);
@@ -101,13 +97,13 @@ namespace BitNetSharp.Tests
             };
         }
 
-        private static void VerifyFeedForwardResidualMatchesBaseline(int caseIndex, BitNetSharp.Nodes.InferenceBackend backend)
+        private static void VerifyFeedForwardResidualMatchesBaseline(int caseIndex, string backend)
         {
             using var model = TestModelFactory.LoadModel();
             FeedForwardResidualCase testCase = GetFeedForwardResidualCase(caseIndex);
             var node = new BitNetSharp.Nodes.FeedForwardResidualNode(
                 model,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 1));
             var session = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             testCase.FirstLayerFfn.FeedForwardInput.CopyTo(session.FeedForwardInput.Span);
             testCase.FirstLayerFfn.FeedForwardDown.CopyTo(session.FeedForwardOutput.Span);
@@ -118,16 +114,16 @@ namespace BitNetSharp.Tests
             AssertFloatArraysAreClose(testCase.FirstLayerFfn.LayerOutput, session.Embedding.Span.ToArray(), 1e-4f, $"token {testCase.TokenId} ({testCase.TokenText})");
         }
 
-        private static void VerifyFeedForwardResidualMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend backend)
+        private static void VerifyFeedForwardResidualMultiThreadMatchesSingleThread(string backend)
         {
             using var model = TestModelFactory.LoadModel();
             FeedForwardResidualCase testCase = GetFeedForwardResidualCase(DebugCaseIndex);
             var singleThreadNode = new BitNetSharp.Nodes.FeedForwardResidualNode(
                 model,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 1));
             var multiThreadNode = new BitNetSharp.Nodes.FeedForwardResidualNode(
                 model,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 2));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 2));
             var singleThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             var multiThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             testCase.FirstLayerFfn.FeedForwardInput.CopyTo(singleThreadSession.FeedForwardInput.Span);

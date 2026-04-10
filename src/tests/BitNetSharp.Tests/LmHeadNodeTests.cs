@@ -16,39 +16,35 @@ namespace BitNetSharp.Tests
         private static readonly Lazy<LmHeadVectorsDocument> LmHeadVectorsDocumentCache = new(LoadLmHeadVectorsDocument);
 
         [TestMethod]
-        public void LmHead_DefaultConfig_SimdAutoThreads()
+        public void LmHead_ProvidedConfig_UsesConfiguredProvider()
         {
             using var model = TestModelFactory.LoadModel();
-            var node = new BitNetSharp.Nodes.LmHeadNode(model);
+            var node = new BitNetSharp.Nodes.LmHeadNode(model, inferenceConfig: TestInferenceConfigs.Simd(BitNetSharp.Nodes.InferenceConfig.AutoThreadCount));
 
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceBackend.SIMD, node.InferenceConfig.Backend);
+            Assert.AreEqual(TestInferenceConfigs.SimdBackend, node.InferenceConfig.Backend);
             Assert.AreEqual(BitNetSharp.Nodes.InferenceConfig.AutoThreadCount, node.InferenceConfig.ThreadCount);
         }
 
         [TestMethod]
-        public void LmHead_NullConfig_CreatesNewInstance()
+        public void LmHead_NullConfig_Throws()
         {
             using var model = TestModelFactory.LoadModel();
-            var firstNode = new BitNetSharp.Nodes.LmHeadNode(model, inferenceConfig: null);
-            var secondNode = new BitNetSharp.Nodes.LmHeadNode(model, inferenceConfig: null);
 
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceBackend.SIMD, firstNode.InferenceConfig.Backend);
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceConfig.AutoThreadCount, firstNode.InferenceConfig.ThreadCount);
-            Assert.AreNotSame(firstNode.InferenceConfig, secondNode.InferenceConfig);
+            Assert.ThrowsExactly<ArgumentNullException>(() => new BitNetSharp.Nodes.LmHeadNode(model, inferenceConfig: null));
         }
 
         [TestMethod]
         [DynamicData(nameof(GetLmHeadCaseIndices))]
         public void LmHead_MatchesBaseline_CPU(int caseIndex)
         {
-            VerifyLmHeadMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.CPU);
+            VerifyLmHeadMatchesBaseline(caseIndex, TestInferenceConfigs.CpuBackend);
         }
 
         [TestMethod]
         [DynamicData(nameof(GetLmHeadCaseIndices))]
         public void LmHead_MatchesBaseline_Tensor(int caseIndex)
         {
-            VerifyLmHeadMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.Tensor);
+            VerifyLmHeadMatchesBaseline(caseIndex, TestInferenceConfigs.TensorBackend);
         }
 
         [TestMethod]
@@ -56,26 +52,26 @@ namespace BitNetSharp.Tests
         public void LmHead_MatchesBaseline_SIMD(int caseIndex)
         {
             EnsureAvxSupported();
-            VerifyLmHeadMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.SIMD);
+            VerifyLmHeadMatchesBaseline(caseIndex, TestInferenceConfigs.SimdBackend);
         }
 
         [TestMethod]
         public void LmHead_CPU_MultiThreadMatchesSingleThread()
         {
-            VerifyLmHeadMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.CPU);
+            VerifyLmHeadMultiThreadMatchesSingleThread(TestInferenceConfigs.CpuBackend);
         }
 
         [TestMethod]
         public void LmHead_Tensor_MultiThreadMatchesSingleThread()
         {
-            VerifyLmHeadMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.Tensor);
+            VerifyLmHeadMultiThreadMatchesSingleThread(TestInferenceConfigs.TensorBackend);
         }
 
         [TestMethod]
         public void LmHead_SIMD_MultiThreadMatchesSingleThread()
         {
             EnsureAvxSupported();
-            VerifyLmHeadMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.SIMD);
+            VerifyLmHeadMultiThreadMatchesSingleThread(TestInferenceConfigs.SimdBackend);
         }
 
         [TestMethod]
@@ -85,11 +81,11 @@ namespace BitNetSharp.Tests
             LmHeadCase testCase = GetLmHeadCase(DebugCaseIndex);
             var uncachedNode = new BitNetSharp.Nodes.LmHeadNode(
                 model,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: TestInferenceConfigs.Cpu(1));
             var cachedNode = new BitNetSharp.Nodes.LmHeadNode(
                 model,
                 enableCache: true,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: TestInferenceConfigs.Cpu(1));
             var uncachedSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             var cachedSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             testCase.FinalNormOutput.Values.CopyTo(uncachedSession.FinalNormOutput.Span);
@@ -111,7 +107,7 @@ namespace BitNetSharp.Tests
             LmHeadCase testCase = GetLmHeadCase(DebugCaseIndex);
             var node = new BitNetSharp.Nodes.LmHeadNode(
                 model,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: TestInferenceConfigs.Cpu(1));
             var session = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             testCase.FinalNormOutput.Values.CopyTo(session.FinalNormOutput.Span);
 
@@ -126,13 +122,13 @@ namespace BitNetSharp.Tests
             };
         }
 
-        private static void VerifyLmHeadMatchesBaseline(int caseIndex, BitNetSharp.Nodes.InferenceBackend backend)
+        private static void VerifyLmHeadMatchesBaseline(int caseIndex, string backend)
         {
             using var model = TestModelFactory.LoadModel();
             LmHeadCase testCase = GetLmHeadCase(caseIndex);
             var node = new BitNetSharp.Nodes.LmHeadNode(
                 model,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 1));
             var session = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             testCase.FinalNormOutput.Values.CopyTo(session.FinalNormOutput.Span);
 
@@ -142,16 +138,16 @@ namespace BitNetSharp.Tests
             AssertFloatArraysAreClose(testCase.LmHead.Logits, session.Logits.Span.ToArray(), 1e-2f, $"token {testCase.TokenId} ({testCase.TokenText})");
         }
 
-        private static void VerifyLmHeadMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend backend)
+        private static void VerifyLmHeadMultiThreadMatchesSingleThread(string backend)
         {
             using var model = TestModelFactory.LoadModel();
             LmHeadCase testCase = GetLmHeadCase(DebugCaseIndex);
             var singleThreadNode = new BitNetSharp.Nodes.LmHeadNode(
                 model,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 1));
             var multiThreadNode = new BitNetSharp.Nodes.LmHeadNode(
                 model,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 2));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 2));
             var singleThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             var multiThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             testCase.FinalNormOutput.Values.CopyTo(singleThreadSession.FinalNormOutput.Span);

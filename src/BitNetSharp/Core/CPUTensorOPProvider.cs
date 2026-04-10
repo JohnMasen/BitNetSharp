@@ -19,7 +19,7 @@ namespace BitNetSharp.Core
             ThreadCount = threadCount;
         }
 
-        public string Backend => Nodes.InferenceBackendExtensions.ToBackendName(Nodes.InferenceBackend.Tensor);
+        public string Backend => "Tensor";
 
         public int ThreadCount { get; }
 

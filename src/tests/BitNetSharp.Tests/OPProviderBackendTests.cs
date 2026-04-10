@@ -11,7 +11,7 @@ namespace BitNetSharp.Tests
         {
             IOPProvider provider = new CPUDefaultOPProvider();
 
-            Assert.AreEqual(InferenceBackendNames.CPU, provider.Backend);
+            Assert.AreEqual(TestInferenceConfigs.CpuBackend, provider.Backend);
         }
 
         [TestMethod]
@@ -19,7 +19,7 @@ namespace BitNetSharp.Tests
         {
             IOPProvider provider = new CPUTensorOPProvider();
 
-            Assert.AreEqual(InferenceBackendNames.Tensor, provider.Backend);
+            Assert.AreEqual(TestInferenceConfigs.TensorBackend, provider.Backend);
         }
 
         [TestMethod]
@@ -27,7 +27,7 @@ namespace BitNetSharp.Tests
         {
             IOPProvider provider = new CPUSimdOPProvider();
 
-            Assert.AreEqual(InferenceBackendNames.SIMD, provider.Backend);
+            Assert.AreEqual(TestInferenceConfigs.SimdBackend, provider.Backend);
         }
     }
 }

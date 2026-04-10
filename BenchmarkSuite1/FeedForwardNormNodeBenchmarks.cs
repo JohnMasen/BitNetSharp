@@ -38,14 +38,14 @@ public class FeedForwardNormNodeBenchmarks
         };
         BenchmarkDataHelper.FillDeterministicValues(session.FeedForwardInput.Span, 7);
 
-        cpuSingleThreadNode = CreateNode(layerDefinition, InferenceBackend.CPU, 1);
-        cpuMultiThreadNode = CreateNode(layerDefinition, InferenceBackend.CPU, InferenceConfig.AutoThreadCount);
-        tensorSingleThreadNode = CreateNode(layerDefinition, InferenceBackend.Tensor, 1);
-        tensorMultiThreadNode = CreateNode(layerDefinition, InferenceBackend.Tensor, InferenceConfig.AutoThreadCount);
+        cpuSingleThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Cpu(1));
+        cpuMultiThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Cpu(InferenceConfig.AutoThreadCount));
+        tensorSingleThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Tensor(1));
+        tensorMultiThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Tensor(InferenceConfig.AutoThreadCount));
         if (Avx.IsSupported && Avx2.IsSupported)
         {
-            simdSingleThreadNode = CreateNode(layerDefinition, InferenceBackend.SIMD, 1);
-            simdMultiThreadNode = CreateNode(layerDefinition, InferenceBackend.SIMD, InferenceConfig.AutoThreadCount);
+            simdSingleThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Simd(1));
+            simdMultiThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Simd(InferenceConfig.AutoThreadCount));
         }
     }
 
@@ -99,13 +99,13 @@ public class FeedForwardNormNodeBenchmarks
         return Run(simdMultiThreadNode);
     }
 
-    private FeedForwardNormNode CreateNode(BitNetLayerDefinition layerDefinition, InferenceBackend backend, int threadCount)
+    private FeedForwardNormNode CreateNode(BitNetLayerDefinition layerDefinition, InferenceConfig inferenceConfig)
     {
         var node = new FeedForwardNormNode(
             model!,
             layerDefinition.FeedForwardNorm,
             enableCache: true,
-            inferenceConfig: new InferenceConfig(backend, threadCount));
+            inferenceConfig: inferenceConfig);
         node.Init();
         return node;
     }

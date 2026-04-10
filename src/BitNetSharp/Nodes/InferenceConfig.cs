@@ -1,22 +1,21 @@
+using BitNetSharp.Core;
+
 namespace BitNetSharp.Nodes
 {
     public sealed class InferenceConfig
     {
         public const int AutoThreadCount = 0;
 
-        public InferenceConfig(InferenceBackend backend, int threadCount)
+        public InferenceConfig(IOPProvider opProvider)
         {
-            if (threadCount < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(threadCount));
-            }
-
-            Backend = backend;
-            ThreadCount = threadCount;
+            ArgumentNullException.ThrowIfNull(opProvider);
+            OPProvider = opProvider;
         }
 
-        public InferenceBackend Backend { get; }
+        public IOPProvider OPProvider { get; }
 
-        public int ThreadCount { get; }
+        public string Backend => OPProvider.Backend;
+
+        public int ThreadCount => OPProvider.ThreadCount;
     }
 }

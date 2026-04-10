@@ -29,8 +29,8 @@
 - 已实现并验证的 node：10 个
 - 未实现的核心 node：无
 - 当前主要阻塞：runtime 正式架构仍未完成；当前单 token 端到端入口仅用于链路验证，后续会删除
-- 已引入 `IOPProvider1` / `IOPProvider2` 以及 `CPUDefaultOPProvider` / `CPUTensorOPProvider` / `CPUSimdOPProvider`
-- 已移除 `CPUBaseOPProvider` 与 `OPProviderFactory`；当前 `Node` 层按 `InferenceConfig` 直接实例化具体 provider
+- 已引入 `IOPProvider` 以及 `CPUDefaultOPProvider` / `CPUTensorOPProvider` / `CPUSimdOPProvider`
+- 已移除 `CPUBaseOPProvider`、`OPProviderFactory` 与 `InferenceBackend`；当前 `InferenceConfig` 直接持有 `IOPProvider`，`Node` / `Runtime` 不再通过 enum 分支选择 backend/provider
 - `MathHelper` 已彻底移除；高层复合逻辑与低层 backend kernel 现均由 provider 承载
 - 各 concrete provider 已回收为单文件实现，避免额外的 `*.Kernels.cs` 分层
 - `IOPProvider2` 现已承载纯编排默认实现；共享参数校验已独立收敛到 `ValidationHelper`
@@ -45,12 +45,14 @@
 - backend 驱动的 node 单元测试已补齐 `CPU` / `Tensor` / `SIMD` 的单线程基线与多线程一致性覆盖；缺失的 `BenchmarkSuite1` 6 档矩阵也已补齐到 `FeedForward` / `FeedForwardNorm` / `FeedForwardResidual` / `FinalNorm` / `LmHead`
 - `BenchmarkSuite1` 的 node benchmark 风格已进一步统一：公共输入填充与模型路径查找已提取，node 输入准备改为直接填充目标 session buffer，避免通过上游 node 预热来混入额外 setup 语义
 - `CPUDefaultOPProvider` / `CPUTensorOPProvider` / `CPUSimdOPProvider` 中仅做直接转发的 `Execute*` wrapper 已移除，公共入口直接承载实现，减少无意义的方法层级
-- `IOPProvider1` 中无实际用途的 `operationName` 参数已移除；`IOPProvider2` 默认实现、node 调用点与相关测试已同步清理这类无效标签参数
+- `IOPProvider` 中无实际用途的 `operationName` 参数已移除；相关调用点与测试已同步清理这类无效标签参数
 - `RmsNormNode` / `FeedForwardNormNode` / `FinalNormNode` / `FeedForwardResidualNode` 中仅做直接转发的 `ExecuteForward` wrapper 也已移除；当前 node/OP 主链路中的无意义方法层级已继续压缩
 - `LmHeadNode` / `QKVProjectionNode` / `ResidualNode` / `FeedForwardNode` / `AttentionNode` 以及剩余 norm/residual node 中仅作为 `Forward` 延续的 `ForwardCore` 已内联回 `Forward`；当前 node 主链路中的 trivial wrapper 基本已清掉
 - 已为 `BitNetRuntime` 添加临时 `Inference(int tokenId)` 入口，用于验证当前单 token 完整链路：`Embedding -> per-layer(attn norm / QKV / Attention / Residual / FFN norm / FFN / FFN residual) -> FinalNorm -> LmHead -> Sampling -> Decode`；该方法及其测试后续将随 runtime 正式架构演进一并删除
 - 多余的 `global::BitNetSharp.` 资格限定已继续清理；当前剩余测试代码已改为优先使用普通命名空间引用，仅在未来确有命名冲突时才保留 `global::`
 - 临时 `BitNetRuntime.Inference` 测试已补上对 `layer_vectors_pure.json` 中 `next_token_id` 的直接断言，当前既验证 runtime 编排链路一致性，也验证最终 decode 输出与 baseline 数据一致
-- `OPProviderBackendTests` 中针对 `IOPProvider2` 默认编排的临时测试已移除；当前 OP 相关测试聚焦具体 provider 的 `IOPProvider1` 行为与实际 node 路径
+- `OPProviderBackendTests` 中针对 `IOPProvider2` 默认编排的临时测试已移除；当前 OP 相关测试聚焦具体 provider 的 `IOPProvider` 行为与实际 node 路径
 - 默认开发节奏下，所有多 case 的数据驱动测试当前均只枚举第一个 case，以缩短回归时间；保留原有按 caseId 取数逻辑，后续需要扩大覆盖时可直接恢复 provider 枚举
 - 与首 case 数据驱动测试重复的专用 `DebugCase` 基线测试入口已移除；当前调试默认直接复用只跑首 case 的数据驱动测试
+- `InferenceConfig` 中硬编码 `CPU` / `Tensor` / `SIMD` 三类 provider 的 `Create*` 工厂已移除；核心层不再通过这些静态入口假设固定 provider 集合，调用方侧改为显式构造并传入 `IOPProvider`
+- `OPProviderBackendNames` 也已从主代码移除；provider 自身直接声明 backend 字符串，测试侧固定标识改收敛到测试辅助，避免主代码继续暴露固定 provider 集合假设

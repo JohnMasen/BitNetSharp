@@ -16,25 +16,21 @@ namespace BitNetSharp.Tests
         private static readonly Lazy<ResidualVectorsDocument> ResidualVectorsDocumentCache = new(LoadResidualVectorsDocument);
 
         [TestMethod]
-        public void Residual_DefaultConfig_CpuSingleThread()
+        public void Residual_ProvidedConfig_UsesConfiguredProvider()
         {
             using var model = TestModelFactory.LoadModel();
-            var node = new BitNetSharp.Nodes.ResidualNode(model);
+            var node = new BitNetSharp.Nodes.ResidualNode(model, TestInferenceConfigs.Cpu(1));
 
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceBackend.CPU, node.InferenceConfig.Backend);
+            Assert.AreEqual(TestInferenceConfigs.CpuBackend, node.InferenceConfig.Backend);
             Assert.AreEqual(1, node.InferenceConfig.ThreadCount);
         }
 
         [TestMethod]
-        public void Residual_NullConfig_CreatesNewInstance()
+        public void Residual_NullConfig_Throws()
         {
             using var model = TestModelFactory.LoadModel();
-            var firstNode = new BitNetSharp.Nodes.ResidualNode(model, inferenceConfig: null);
-            var secondNode = new BitNetSharp.Nodes.ResidualNode(model, inferenceConfig: null);
 
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceBackend.CPU, firstNode.InferenceConfig.Backend);
-            Assert.AreEqual(1, firstNode.InferenceConfig.ThreadCount);
-            Assert.AreNotSame(firstNode.InferenceConfig, secondNode.InferenceConfig);
+            Assert.ThrowsExactly<ArgumentNullException>(() => new BitNetSharp.Nodes.ResidualNode(model, inferenceConfig: null));
         }
 
         [TestMethod]
@@ -48,7 +44,7 @@ namespace BitNetSharp.Tests
         [DynamicData(nameof(GetResidualCaseIndices))]
         public void Residual_MatchesBaseline_Tensor(int caseIndex)
         {
-            VerifyResidualMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.Tensor);
+            VerifyResidualMatchesBaseline(caseIndex, TestInferenceConfigs.TensorBackend);
         }
 
         [TestMethod]
@@ -56,26 +52,26 @@ namespace BitNetSharp.Tests
         public void Residual_MatchesBaseline_SIMD(int caseIndex)
         {
             EnsureSimdSupported();
-            VerifyResidualMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.SIMD);
+            VerifyResidualMatchesBaseline(caseIndex, TestInferenceConfigs.SimdBackend);
         }
 
         [TestMethod]
         public void Residual_CPU_MultiThreadMatchesSingleThread()
         {
-            VerifyResidualMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.CPU);
+            VerifyResidualMultiThreadMatchesSingleThread(TestInferenceConfigs.CpuBackend);
         }
 
         [TestMethod]
         public void Residual_Tensor_MultiThreadMatchesSingleThread()
         {
-            VerifyResidualMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.Tensor);
+            VerifyResidualMultiThreadMatchesSingleThread(TestInferenceConfigs.TensorBackend);
         }
 
         [TestMethod]
         public void Residual_SIMD_MultiThreadMatchesSingleThread()
         {
             EnsureSimdSupported();
-            VerifyResidualMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.SIMD);
+            VerifyResidualMultiThreadMatchesSingleThread(TestInferenceConfigs.SimdBackend);
         }
 
         [TestMethod]
@@ -85,7 +81,7 @@ namespace BitNetSharp.Tests
             ResidualCase testCase = GetResidualCase(0);
             var node = new BitNetSharp.Nodes.ResidualNode(
                 model,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: TestInferenceConfigs.Cpu(1));
             var session = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             session.Embedding = testCase.Dequantized.Values.ToArray();
             session.AttentionOutput = testCase.FirstLayerAttnOutput.Values.ToArray();
@@ -103,16 +99,16 @@ namespace BitNetSharp.Tests
 
         private static void VerifyResidualMatchesBaselineCpu(int caseIndex)
         {
-            VerifyResidualMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.CPU);
+            VerifyResidualMatchesBaseline(caseIndex, TestInferenceConfigs.CpuBackend);
         }
 
-        private static void VerifyResidualMatchesBaseline(int caseIndex, BitNetSharp.Nodes.InferenceBackend backend)
+        private static void VerifyResidualMatchesBaseline(int caseIndex, string backend)
         {
             using var model = TestModelFactory.LoadModel();
             ResidualCase testCase = GetResidualCase(caseIndex);
             var node = new BitNetSharp.Nodes.ResidualNode(
                 model,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 1));
             var session = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             session.Embedding = testCase.Dequantized.Values.ToArray();
             session.AttentionOutput = testCase.FirstLayerAttnOutput.Values.ToArray();
@@ -123,16 +119,16 @@ namespace BitNetSharp.Tests
             AssertFloatArraysAreClose(testCase.FirstLayerFfn.FeedForwardInput, session.FeedForwardInput.Span.ToArray(), 1e-6f, $"token {testCase.TokenId} ({testCase.TokenText})");
         }
 
-        private static void VerifyResidualMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend backend)
+        private static void VerifyResidualMultiThreadMatchesSingleThread(string backend)
         {
             using var model = TestModelFactory.LoadModel();
             ResidualCase testCase = GetResidualCase(DebugCaseIndex);
             var singleThreadNode = new BitNetSharp.Nodes.ResidualNode(
                 model,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 1));
             var multiThreadNode = new BitNetSharp.Nodes.ResidualNode(
                 model,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 2));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 2));
             var singleThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             var multiThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             singleThreadSession.Embedding = testCase.Dequantized.Values.ToArray();

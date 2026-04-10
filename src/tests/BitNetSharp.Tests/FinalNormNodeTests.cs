@@ -16,39 +16,35 @@ namespace BitNetSharp.Tests
         private static readonly Lazy<FinalNormVectorsDocument> FinalNormVectorsDocumentCache = new(LoadFinalNormVectorsDocument);
 
         [TestMethod]
-        public void FinalNorm_DefaultConfig_SimdSingleThread()
+        public void FinalNorm_ProvidedConfig_UsesConfiguredProvider()
         {
             using var model = TestModelFactory.LoadModel();
-            var node = new BitNetSharp.Nodes.FinalNormNode(model);
+            var node = new BitNetSharp.Nodes.FinalNormNode(model, inferenceConfig: TestInferenceConfigs.Simd(1));
 
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceBackend.SIMD, node.InferenceConfig.Backend);
+            Assert.AreEqual(TestInferenceConfigs.SimdBackend, node.InferenceConfig.Backend);
             Assert.AreEqual(1, node.InferenceConfig.ThreadCount);
         }
 
         [TestMethod]
-        public void FinalNorm_NullConfig_CreatesNewInstance()
+        public void FinalNorm_NullConfig_Throws()
         {
             using var model = TestModelFactory.LoadModel();
-            var firstNode = new BitNetSharp.Nodes.FinalNormNode(model, inferenceConfig: null);
-            var secondNode = new BitNetSharp.Nodes.FinalNormNode(model, inferenceConfig: null);
 
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceBackend.SIMD, firstNode.InferenceConfig.Backend);
-            Assert.AreEqual(1, firstNode.InferenceConfig.ThreadCount);
-            Assert.AreNotSame(firstNode.InferenceConfig, secondNode.InferenceConfig);
+            Assert.ThrowsExactly<ArgumentNullException>(() => new BitNetSharp.Nodes.FinalNormNode(model, inferenceConfig: null));
         }
 
         [TestMethod]
         [DynamicData(nameof(GetFinalNormCaseIndices))]
         public void FinalNorm_MatchesBaseline_CPU(int caseIndex)
         {
-            VerifyFinalNormMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.CPU);
+            VerifyFinalNormMatchesBaseline(caseIndex, TestInferenceConfigs.CpuBackend);
         }
 
         [TestMethod]
         [DynamicData(nameof(GetFinalNormCaseIndices))]
         public void FinalNorm_MatchesBaseline_Tensor(int caseIndex)
         {
-            VerifyFinalNormMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.Tensor);
+            VerifyFinalNormMatchesBaseline(caseIndex, TestInferenceConfigs.TensorBackend);
         }
 
         [TestMethod]
@@ -56,26 +52,26 @@ namespace BitNetSharp.Tests
         public void FinalNorm_MatchesBaseline_SIMD(int caseIndex)
         {
             EnsureAvx2Supported();
-            VerifyFinalNormMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.SIMD);
+            VerifyFinalNormMatchesBaseline(caseIndex, TestInferenceConfigs.SimdBackend);
         }
 
         [TestMethod]
         public void FinalNorm_CPU_MultiThreadMatchesSingleThread()
         {
-            VerifyFinalNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.CPU);
+            VerifyFinalNormMultiThreadMatchesSingleThread(TestInferenceConfigs.CpuBackend);
         }
 
         [TestMethod]
         public void FinalNorm_Tensor_MultiThreadMatchesSingleThread()
         {
-            VerifyFinalNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.Tensor);
+            VerifyFinalNormMultiThreadMatchesSingleThread(TestInferenceConfigs.TensorBackend);
         }
 
         [TestMethod]
         public void FinalNorm_SIMD_MultiThreadMatchesSingleThread()
         {
             EnsureAvx2Supported();
-            VerifyFinalNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.SIMD);
+            VerifyFinalNormMultiThreadMatchesSingleThread(TestInferenceConfigs.SimdBackend);
         }
 
         [TestMethod]
@@ -85,11 +81,11 @@ namespace BitNetSharp.Tests
             FinalNormCase testCase = GetFinalNormCase(DebugCaseIndex);
             var uncachedNode = new BitNetSharp.Nodes.FinalNormNode(
                 model,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: TestInferenceConfigs.Cpu(1));
             var cachedNode = new BitNetSharp.Nodes.FinalNormNode(
                 model,
                 enableCache: true,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: TestInferenceConfigs.Cpu(1));
             var uncachedSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             var cachedSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             testCase.FinalNormInput.Values.CopyTo(uncachedSession.Embedding.Span);
@@ -111,7 +107,7 @@ namespace BitNetSharp.Tests
             FinalNormCase testCase = GetFinalNormCase(DebugCaseIndex);
             var node = new BitNetSharp.Nodes.FinalNormNode(
                 model,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: TestInferenceConfigs.Cpu(1));
             var session = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             testCase.FinalNormInput.Values.CopyTo(session.Embedding.Span);
 
@@ -126,13 +122,13 @@ namespace BitNetSharp.Tests
             };
         }
 
-        private static void VerifyFinalNormMatchesBaseline(int caseIndex, BitNetSharp.Nodes.InferenceBackend backend)
+        private static void VerifyFinalNormMatchesBaseline(int caseIndex, string backend)
         {
             using var model = TestModelFactory.LoadModel();
             FinalNormCase testCase = GetFinalNormCase(caseIndex);
             var node = new BitNetSharp.Nodes.FinalNormNode(
                 model,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 1));
             var session = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             testCase.FinalNormInput.Values.CopyTo(session.Embedding.Span);
 
@@ -142,16 +138,16 @@ namespace BitNetSharp.Tests
             AssertFloatArraysAreClose(testCase.FinalNormOutput.Values, session.FinalNormOutput.Span.ToArray(), 1e-6f, $"token {testCase.TokenId} ({testCase.TokenText})");
         }
 
-        private static void VerifyFinalNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend backend)
+        private static void VerifyFinalNormMultiThreadMatchesSingleThread(string backend)
         {
             using var model = TestModelFactory.LoadModel();
             FinalNormCase testCase = GetFinalNormCase(DebugCaseIndex);
             var singleThreadNode = new BitNetSharp.Nodes.FinalNormNode(
                 model,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 1));
             var multiThreadNode = new BitNetSharp.Nodes.FinalNormNode(
                 model,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 2));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 2));
             var singleThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             var multiThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             testCase.FinalNormInput.Values.CopyTo(singleThreadSession.Embedding.Span);

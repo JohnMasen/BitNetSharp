@@ -37,14 +37,14 @@ public class FinalNormNodeBenchmarks
         };
         BenchmarkDataHelper.FillDeterministicValues(session.Embedding.Span, 17);
 
-        cpuSingleThreadNode = CreateNode(InferenceBackend.CPU, 1);
-        cpuMultiThreadNode = CreateNode(InferenceBackend.CPU, InferenceConfig.AutoThreadCount);
-        tensorSingleThreadNode = CreateNode(InferenceBackend.Tensor, 1);
-        tensorMultiThreadNode = CreateNode(InferenceBackend.Tensor, InferenceConfig.AutoThreadCount);
+        cpuSingleThreadNode = CreateNode(BenchmarkInferenceConfigs.Cpu(1));
+        cpuMultiThreadNode = CreateNode(BenchmarkInferenceConfigs.Cpu(InferenceConfig.AutoThreadCount));
+        tensorSingleThreadNode = CreateNode(BenchmarkInferenceConfigs.Tensor(1));
+        tensorMultiThreadNode = CreateNode(BenchmarkInferenceConfigs.Tensor(InferenceConfig.AutoThreadCount));
         if (Avx.IsSupported && Avx2.IsSupported)
         {
-            simdSingleThreadNode = CreateNode(InferenceBackend.SIMD, 1);
-            simdMultiThreadNode = CreateNode(InferenceBackend.SIMD, InferenceConfig.AutoThreadCount);
+            simdSingleThreadNode = CreateNode(BenchmarkInferenceConfigs.Simd(1));
+            simdMultiThreadNode = CreateNode(BenchmarkInferenceConfigs.Simd(InferenceConfig.AutoThreadCount));
         }
     }
 
@@ -98,12 +98,12 @@ public class FinalNormNodeBenchmarks
         return Run(simdMultiThreadNode);
     }
 
-    private FinalNormNode CreateNode(InferenceBackend backend, int threadCount)
+    private FinalNormNode CreateNode(InferenceConfig inferenceConfig)
     {
         var node = new FinalNormNode(
             model!,
             enableCache: true,
-            inferenceConfig: new InferenceConfig(backend, threadCount));
+            inferenceConfig: inferenceConfig);
         node.Init();
         return node;
     }

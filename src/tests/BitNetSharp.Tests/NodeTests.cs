@@ -18,7 +18,7 @@ namespace BitNetSharp.Tests
         public void Embedding_ReturnsExpectedLength()
         {
             using var model = TestModelFactory.LoadModel();
-            var node = new BitNetSharp.Nodes.EmbeddingNode(model);
+            var node = new BitNetSharp.Nodes.EmbeddingNode(model, inferenceConfig: TestInferenceConfigs.Cpu(1));
             var context = TestModelFactory.CreateSession(model, token: 0);
 
             node.Init();
@@ -32,7 +32,7 @@ namespace BitNetSharp.Tests
         public void Embedding_ThrowsForOutOfRangeToken()
         {
             using var model = TestModelFactory.LoadModel();
-            var node = new BitNetSharp.Nodes.EmbeddingNode(model);
+            var node = new BitNetSharp.Nodes.EmbeddingNode(model, inferenceConfig: TestInferenceConfigs.Cpu(1));
             var context = TestModelFactory.CreateSession(model, token: (int)model.Config!.VocabularySize);
 
             node.Init();
@@ -43,7 +43,7 @@ namespace BitNetSharp.Tests
         public void Embedding_ForwardWithoutInit_Throws()
         {
             using var model = TestModelFactory.LoadModel();
-            var node = new BitNetSharp.Nodes.EmbeddingNode(model);
+            var node = new BitNetSharp.Nodes.EmbeddingNode(model, inferenceConfig: TestInferenceConfigs.Cpu(1));
             var context = TestModelFactory.CreateSession(model, token: 0);
 
             Assert.ThrowsExactly<InvalidOperationException>(() => node.Forward(context));
@@ -53,8 +53,8 @@ namespace BitNetSharp.Tests
         public void EmbeddingCache_MatchesUncachedReads()
         {
             using var model = TestModelFactory.LoadModel();
-            var uncachedNode = new BitNetSharp.Nodes.EmbeddingNode(model);
-            var cachedNode = new BitNetSharp.Nodes.EmbeddingNode(model, enableCache: true);
+            var uncachedNode = new BitNetSharp.Nodes.EmbeddingNode(model, inferenceConfig: TestInferenceConfigs.Cpu(1));
+            var cachedNode = new BitNetSharp.Nodes.EmbeddingNode(model, enableCache: true, inferenceConfig: TestInferenceConfigs.Cpu(1));
             var uncachedContext = TestModelFactory.CreateSession(model, token: 0);
             var cachedContext = TestModelFactory.CreateSession(model, token: 0);
 
@@ -68,15 +68,11 @@ namespace BitNetSharp.Tests
         }
 
         [TestMethod]
-        public void Embedding_NullConfig_CreatesNewInstance()
+        public void Embedding_NullConfig_Throws()
         {
             using var model = TestModelFactory.LoadModel();
-            var firstNode = new BitNetSharp.Nodes.EmbeddingNode(model, inferenceConfig: null);
-            var secondNode = new BitNetSharp.Nodes.EmbeddingNode(model, inferenceConfig: null);
 
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceBackend.CPU, firstNode.InferenceConfig.Backend);
-            Assert.AreEqual(1, firstNode.InferenceConfig.ThreadCount);
-            Assert.AreNotSame(firstNode.InferenceConfig, secondNode.InferenceConfig);
+            Assert.ThrowsExactly<ArgumentNullException>(() => new BitNetSharp.Nodes.EmbeddingNode(model, inferenceConfig: null));
         }
 
         [TestMethod]
@@ -87,7 +83,7 @@ namespace BitNetSharp.Tests
             string caseName = GetCaseName(testCase);
             float[] expectedValues = testCase.Dequantized.Values.ToArray();
             using var model = TestModelFactory.LoadModel();
-            var node = new BitNetSharp.Nodes.EmbeddingNode(model);
+            var node = new BitNetSharp.Nodes.EmbeddingNode(model, inferenceConfig: TestInferenceConfigs.Cpu(1));
             var context = TestModelFactory.CreateSession(model, testCase.TokenId);
 
             node.Init();
@@ -108,34 +104,31 @@ namespace BitNetSharp.Tests
         }
 
         [TestMethod]
-        public void RmsNorm_DefaultConfig_SimdSingleThread()
+        public void RmsNorm_ProvidedConfig_UsesConfiguredProvider()
         {
             using var model = TestModelFactory.LoadModel();
             var normTensor = model.GetLayer(0).AttentionNorm;
-            var node = new BitNetSharp.Nodes.RmsNormNode(model, normTensor);
+            var inferenceConfig = TestInferenceConfigs.Simd(1);
+            var node = new BitNetSharp.Nodes.RmsNormNode(model, normTensor, inferenceConfig: inferenceConfig);
 
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceBackend.SIMD, node.InferenceConfig.Backend);
+            Assert.AreEqual(TestInferenceConfigs.SimdBackend, node.InferenceConfig.Backend);
             Assert.AreEqual(1, node.InferenceConfig.ThreadCount);
         }
 
         [TestMethod]
-        public void RmsNorm_NullConfig_CreatesNewInstance()
+        public void RmsNorm_NullConfig_Throws()
         {
             using var model = TestModelFactory.LoadModel();
             var normTensor = model.GetLayer(0).AttentionNorm;
-            var firstNode = new BitNetSharp.Nodes.RmsNormNode(model, normTensor, inferenceConfig: null);
-            var secondNode = new BitNetSharp.Nodes.RmsNormNode(model, normTensor, inferenceConfig: null);
 
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceBackend.SIMD, firstNode.InferenceConfig.Backend);
-            Assert.AreEqual(1, firstNode.InferenceConfig.ThreadCount);
-            Assert.AreNotSame(firstNode.InferenceConfig, secondNode.InferenceConfig);
+            Assert.ThrowsExactly<ArgumentNullException>(() => new BitNetSharp.Nodes.RmsNormNode(model, normTensor, inferenceConfig: null));
         }
 
         [TestMethod]
         public void RmsNorm_MatchesManualFormula()
         {
             using var model = TestModelFactory.LoadModel();
-            var embeddingNode = new BitNetSharp.Nodes.EmbeddingNode(model);
+            var embeddingNode = new BitNetSharp.Nodes.EmbeddingNode(model, inferenceConfig: TestInferenceConfigs.Cpu(1));
             var context = TestModelFactory.CreateSession(model, token: 0);
             embeddingNode.Init();
             embeddingNode.Forward(context);
@@ -144,7 +137,7 @@ namespace BitNetSharp.Tests
             var node = new BitNetSharp.Nodes.RmsNormNode(
                 model,
                 normTensor,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: TestInferenceConfigs.Cpu(1));
 
             node.Init();
             node.Forward(context);
@@ -168,7 +161,7 @@ namespace BitNetSharp.Tests
             var node = new BitNetSharp.Nodes.RmsNormNode(
                 model,
                 normTensor,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: TestInferenceConfigs.Cpu(1));
             var context = TestModelFactory.CreateSession(model, token: 0);
             context.Embedding = input.ToArray();
 
@@ -183,13 +176,13 @@ namespace BitNetSharp.Tests
         [TestMethod]
         public void RmsNorm_CPU_MultiThreadMatchesSingleThread()
         {
-            VerifyRmsNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.CPU);
+            VerifyRmsNormMultiThreadMatchesSingleThread(TestInferenceConfigs.CpuBackend);
         }
 
         [TestMethod]
         public void RmsNorm_Tensor_MultiThreadMatchesSingleThread()
         {
-            VerifyRmsNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.Tensor);
+            VerifyRmsNormMultiThreadMatchesSingleThread(TestInferenceConfigs.TensorBackend);
         }
 
         [TestMethod]
@@ -200,7 +193,7 @@ namespace BitNetSharp.Tests
                 Assert.Inconclusive("AVX2 is not supported on the current machine.");
             }
 
-            VerifyRmsNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.SIMD);
+            VerifyRmsNormMultiThreadMatchesSingleThread(TestInferenceConfigs.SimdBackend);
         }
 
         [TestMethod]
@@ -216,7 +209,7 @@ namespace BitNetSharp.Tests
             var node = new BitNetSharp.Nodes.RmsNormNode(
                 model,
                 normTensor,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.Tensor, 1));
+                inferenceConfig: TestInferenceConfigs.Tensor(1));
             var context = TestModelFactory.CreateSession(model, token: 0);
             context.Embedding = input.ToArray();
 
@@ -241,7 +234,7 @@ namespace BitNetSharp.Tests
             var node = new BitNetSharp.Nodes.RmsNormNode(
                 model,
                 normTensor,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.SIMD, 1));
+                inferenceConfig: TestInferenceConfigs.Simd(1));
             var context = TestModelFactory.CreateSession(model, token: 0);
             context.Embedding = input.ToArray();
 
@@ -262,7 +255,7 @@ namespace BitNetSharp.Tests
         public void RmsNormCache_MatchesUncachedReads()
         {
             using var model = TestModelFactory.LoadModel();
-            var embeddingNode = new BitNetSharp.Nodes.EmbeddingNode(model);
+            var embeddingNode = new BitNetSharp.Nodes.EmbeddingNode(model, inferenceConfig: TestInferenceConfigs.Cpu(1));
             var context = TestModelFactory.CreateSession(model, token: 0);
             embeddingNode.Init();
             embeddingNode.Forward(context);
@@ -270,12 +263,12 @@ namespace BitNetSharp.Tests
             var uncachedNode = new BitNetSharp.Nodes.RmsNormNode(
                 model,
                 normTensor,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: TestInferenceConfigs.Cpu(1));
             var cachedNode = new BitNetSharp.Nodes.RmsNormNode(
                 model,
                 normTensor,
                 enableCache: true,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: TestInferenceConfigs.Cpu(1));
             var cachedContext = TestModelFactory.CreateSession(model, token: 0);
             cachedContext.Embedding = context.Embedding.Span.ToArray();
 
@@ -295,18 +288,18 @@ namespace BitNetSharp.Tests
         {
             using var model = TestModelFactory.LoadModel();
             var normTensor = model.GetLayer(0).AttentionNorm;
-            var embeddingNode = new BitNetSharp.Nodes.EmbeddingNode(model);
+            var embeddingNode = new BitNetSharp.Nodes.EmbeddingNode(model, inferenceConfig: TestInferenceConfigs.Cpu(1));
             var context = TestModelFactory.CreateSession(model, token: 0);
             embeddingNode.Init();
             embeddingNode.Forward(context);
             var cpuNode = new BitNetSharp.Nodes.RmsNormNode(
                 model,
                 normTensor,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: TestInferenceConfigs.Cpu(1));
             var tensorNode = new BitNetSharp.Nodes.RmsNormNode(
                 model,
                 normTensor,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.Tensor, 1));
+                inferenceConfig: TestInferenceConfigs.Tensor(1));
             var tensorContext = TestModelFactory.CreateSession(model, token: 0);
             tensorContext.Embedding = context.Embedding.Span.ToArray();
 
@@ -325,18 +318,18 @@ namespace BitNetSharp.Tests
         {
             using var model = TestModelFactory.LoadModel();
             var normTensor = model.GetLayer(0).AttentionNorm;
-            var embeddingNode = new BitNetSharp.Nodes.EmbeddingNode(model);
+            var embeddingNode = new BitNetSharp.Nodes.EmbeddingNode(model, inferenceConfig: TestInferenceConfigs.Cpu(1));
             var context = TestModelFactory.CreateSession(model, token: 0);
             embeddingNode.Init();
             embeddingNode.Forward(context);
             var cpuNode = new BitNetSharp.Nodes.RmsNormNode(
                 model,
                 normTensor,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: TestInferenceConfigs.Cpu(1));
             var simdNode = new BitNetSharp.Nodes.RmsNormNode(
                 model,
                 normTensor,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.SIMD, 1));
+                inferenceConfig: TestInferenceConfigs.Simd(1));
             var simdContext = TestModelFactory.CreateSession(model, token: 0);
             simdContext.Embedding = context.Embedding.Span.ToArray();
 
@@ -365,7 +358,7 @@ namespace BitNetSharp.Tests
             var node = new BitNetSharp.Nodes.RmsNormNode(
                 model,
                 normTensor,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: TestInferenceConfigs.Cpu(1));
             var context = TestModelFactory.CreateSession(model, token: 0);
             context.Embedding = new float[(int)model.Config!.EmbeddingLength];
 
@@ -424,7 +417,7 @@ namespace BitNetSharp.Tests
             return output;
         }
 
-        private static void VerifyRmsNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend backend)
+        private static void VerifyRmsNormMultiThreadMatchesSingleThread(string backend)
         {
             using var model = TestModelFactory.LoadModel();
             LayerVectorCase testCase = GetLayerCase(0);
@@ -432,11 +425,11 @@ namespace BitNetSharp.Tests
             var singleThreadNode = new BitNetSharp.Nodes.RmsNormNode(
                 model,
                 normTensor,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 1));
             var multiThreadNode = new BitNetSharp.Nodes.RmsNormNode(
                 model,
                 normTensor,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 2));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 2));
             var singleThreadContext = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             var multiThreadContext = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             singleThreadContext.Embedding = testCase.Dequantized.Values.ToArray();

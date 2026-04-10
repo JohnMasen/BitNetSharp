@@ -15,41 +15,34 @@ namespace BitNetSharp.Tests
         private static readonly Lazy<QKVVectorsDocument> QKVVectorsDocumentCache = new(LoadQKVVectorsDocument);
 
         [TestMethod]
-        public void QKV_DefaultConfig_SimdAutoThreads()
+        public void QKV_ProvidedConfig_UsesConfiguredProvider()
         {
             using var model = TestModelFactory.LoadModel();
             var layerDefinition = model.GetLayer(0);
+            var inferenceConfig = TestInferenceConfigs.Simd(BitNetSharp.Nodes.InferenceConfig.AutoThreadCount);
             var node = new BitNetSharp.Nodes.QKVProjectionNode(
                 model,
                 layerDefinition.AttentionQueryWeight,
                 layerDefinition.AttentionKeyWeight,
-                layerDefinition.AttentionValueWeight);
+                layerDefinition.AttentionValueWeight,
+                inferenceConfig: inferenceConfig);
 
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceBackend.SIMD, node.InferenceConfig.Backend);
+            Assert.AreEqual(TestInferenceConfigs.SimdBackend, node.InferenceConfig.Backend);
             Assert.AreEqual(BitNetSharp.Nodes.InferenceConfig.AutoThreadCount, node.InferenceConfig.ThreadCount);
         }
 
         [TestMethod]
-        public void QKV_NullConfig_CreatesNewInstance()
+        public void QKV_NullConfig_Throws()
         {
             using var model = TestModelFactory.LoadModel();
             var layerDefinition = model.GetLayer(0);
-            var firstNode = new BitNetSharp.Nodes.QKVProjectionNode(
-                model,
-                layerDefinition.AttentionQueryWeight,
-                layerDefinition.AttentionKeyWeight,
-                layerDefinition.AttentionValueWeight,
-                inferenceConfig: null);
-            var secondNode = new BitNetSharp.Nodes.QKVProjectionNode(
-                model,
-                layerDefinition.AttentionQueryWeight,
-                layerDefinition.AttentionKeyWeight,
-                layerDefinition.AttentionValueWeight,
-                inferenceConfig: null);
 
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceBackend.SIMD, firstNode.InferenceConfig.Backend);
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceConfig.AutoThreadCount, firstNode.InferenceConfig.ThreadCount);
-            Assert.AreNotSame(firstNode.InferenceConfig, secondNode.InferenceConfig);
+            Assert.ThrowsExactly<ArgumentNullException>(() => new BitNetSharp.Nodes.QKVProjectionNode(
+                model,
+                layerDefinition.AttentionQueryWeight,
+                layerDefinition.AttentionKeyWeight,
+                layerDefinition.AttentionValueWeight,
+                inferenceConfig: null));
         }
 
         [TestMethod]
@@ -57,7 +50,7 @@ namespace BitNetSharp.Tests
         public void QKV_BaselineMatch_CPU(int caseIndex)
         {
             using var model = TestModelFactory.LoadModel();
-            AssertQKVMatchesBaseline(model, BitNetSharp.Nodes.InferenceBackend.CPU, GetQKVCase(caseIndex));
+            AssertQKVMatchesBaseline(model, TestInferenceConfigs.CpuBackend, GetQKVCase(caseIndex));
         }
 
         [TestMethod]
@@ -65,7 +58,7 @@ namespace BitNetSharp.Tests
         public void QKV_BaselineMatch_Tensor(int caseIndex)
         {
             using var model = TestModelFactory.LoadModel();
-            AssertQKVMatchesBaseline(model, BitNetSharp.Nodes.InferenceBackend.Tensor, GetQKVCase(caseIndex));
+            AssertQKVMatchesBaseline(model, TestInferenceConfigs.TensorBackend, GetQKVCase(caseIndex));
         }
 
         [TestMethod]
@@ -75,26 +68,26 @@ namespace BitNetSharp.Tests
             EnsureAvx2Supported();
 
             using var model = TestModelFactory.LoadModel();
-            AssertQKVMatchesBaseline(model, BitNetSharp.Nodes.InferenceBackend.SIMD, GetQKVCase(caseIndex));
+            AssertQKVMatchesBaseline(model, TestInferenceConfigs.SimdBackend, GetQKVCase(caseIndex));
         }
 
         [TestMethod]
         public void QKV_CPU_MultiThreadMatchesSingleThread()
         {
-            VerifyQKVMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.CPU);
+            VerifyQKVMultiThreadMatchesSingleThread(TestInferenceConfigs.CpuBackend);
         }
 
         [TestMethod]
         public void QKV_Tensor_MultiThreadMatchesSingleThread()
         {
-            VerifyQKVMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.Tensor);
+            VerifyQKVMultiThreadMatchesSingleThread(TestInferenceConfigs.TensorBackend);
         }
 
         [TestMethod]
         public void QKV_SIMD_MultiThreadMatchesSingleThread()
         {
             EnsureAvx2Supported();
-            VerifyQKVMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.SIMD);
+            VerifyQKVMultiThreadMatchesSingleThread(TestInferenceConfigs.SimdBackend);
         }
 
         [TestMethod]
@@ -108,14 +101,14 @@ namespace BitNetSharp.Tests
                 layerDefinition.AttentionQueryWeight,
                 layerDefinition.AttentionKeyWeight,
                 layerDefinition.AttentionValueWeight,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: TestInferenceConfigs.Cpu(1));
             var cachedNode = new BitNetSharp.Nodes.QKVProjectionNode(
                 model,
                 layerDefinition.AttentionQueryWeight,
                 layerDefinition.AttentionKeyWeight,
                 layerDefinition.AttentionValueWeight,
                 enableCache: true,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: TestInferenceConfigs.Cpu(1));
             var uncachedContext = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             uncachedContext.RmsNorm = testCase.FirstLayerRmsNorm.Values.ToArray();
             var cachedContext = TestModelFactory.CreateSession(model, token: testCase.TokenId);
@@ -203,7 +196,7 @@ namespace BitNetSharp.Tests
             };
         }
 
-        private static void AssertQKVMatchesBaseline(BitNetSharp.Models.BitNetModel model, BitNetSharp.Nodes.InferenceBackend backend, QKVCase testCase)
+        private static void AssertQKVMatchesBaseline(BitNetSharp.Models.BitNetModel model, string backend, QKVCase testCase)
         {
             string caseName = $"token {testCase.TokenId} ({testCase.TokenText})";
             var layerDefinition = model.GetLayer(0);
@@ -212,7 +205,7 @@ namespace BitNetSharp.Tests
                 layerDefinition.AttentionQueryWeight,
                 layerDefinition.AttentionKeyWeight,
                 layerDefinition.AttentionValueWeight,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 1));
             var context = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             context.RmsNorm = testCase.FirstLayerRmsNorm.Values.ToArray();
 
@@ -224,7 +217,7 @@ namespace BitNetSharp.Tests
             AssertFloatArraysAreClose(testCase.FirstLayerAttnQKV.WQKV.Value.ToArray(), context.QKVValue.Span.ToArray(), 1e-4f, caseName + " value");
         }
 
-        private static void VerifyQKVMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend backend)
+        private static void VerifyQKVMultiThreadMatchesSingleThread(string backend)
         {
             using var model = TestModelFactory.LoadModel();
             QKVCase testCase = GetQKVCase(0);
@@ -234,13 +227,13 @@ namespace BitNetSharp.Tests
                 layerDefinition.AttentionQueryWeight,
                 layerDefinition.AttentionKeyWeight,
                 layerDefinition.AttentionValueWeight,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 1));
             var multiThreadNode = new BitNetSharp.Nodes.QKVProjectionNode(
                 model,
                 layerDefinition.AttentionQueryWeight,
                 layerDefinition.AttentionKeyWeight,
                 layerDefinition.AttentionValueWeight,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 2));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 2));
             var singleThreadContext = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             var multiThreadContext = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             singleThreadContext.RmsNorm = testCase.FirstLayerRmsNorm.Values.ToArray();
@@ -266,7 +259,7 @@ namespace BitNetSharp.Tests
                 layerDefinition.AttentionQueryWeight,
                 layerDefinition.AttentionKeyWeight,
                 layerDefinition.AttentionValueWeight,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: TestInferenceConfigs.Cpu(1));
             var context = TestModelFactory.CreateSession(model, token: 0);
             context.RmsNorm = new float[(int)model.Config!.EmbeddingLength];
 

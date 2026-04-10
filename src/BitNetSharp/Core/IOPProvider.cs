@@ -7,6 +7,8 @@ namespace BitNetSharp.Core
     {
         string Backend { get; }
 
+        int ThreadCount { get; }
+
         void Add(ReadOnlyMemory<float> input, ReadOnlyMemory<float> addend, Memory<float> output);
 
         (float ActivationScale, int ActivationSum) QuantizeBitNetActivations(ReadOnlyMemory<float> input, Memory<sbyte> quantizedValues);

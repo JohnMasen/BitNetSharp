@@ -41,6 +41,7 @@ namespace BitNetSharp.Nodes
             ArgumentNullException.ThrowIfNull(gateTensor);
             ArgumentNullException.ThrowIfNull(upTensor);
             ArgumentNullException.ThrowIfNull(downTensor);
+            ArgumentNullException.ThrowIfNull(inferenceConfig);
 
             if (model.Config is null)
             {
@@ -53,14 +54,8 @@ namespace BitNetSharp.Nodes
             this.upTensor = upTensor;
             this.downTensor = downTensor;
             EnableCache = enableCache;
-            InferenceConfig = inferenceConfig ?? CreateDefaultInferenceConfig();
-            opProvider = InferenceConfig.Backend switch
-            {
-                Nodes.InferenceBackend.CPU => new CPUDefaultOPProvider(InferenceConfig.ThreadCount),
-                Nodes.InferenceBackend.Tensor => new CPUTensorOPProvider(InferenceConfig.ThreadCount),
-                Nodes.InferenceBackend.SIMD => new CPUSimdOPProvider(InferenceConfig.ThreadCount),
-                _ => throw new NotSupportedException($"Backend '{InferenceConfig.Backend}' is not implemented yet."),
-            };
+            InferenceConfig = inferenceConfig;
+            opProvider = InferenceConfig.OPProvider;
 
             ValidateSubNormTensor();
             ValidateProjectionTensor(gateTensor, checked((int)model.Config.EmbeddingLength), checked((int)model.Config.FeedForwardLength), "gate");
@@ -83,11 +78,6 @@ namespace BitNetSharp.Nodes
             }
 
             isInitialized = true;
-        }
-
-        private static Nodes.InferenceConfig CreateDefaultInferenceConfig()
-        {
-            return new Nodes.InferenceConfig(Nodes.InferenceBackend.SIMD, Nodes.InferenceConfig.AutoThreadCount);
         }
 
         /// <summary>

@@ -18,16 +18,12 @@ namespace BitNetSharp.Nodes
         public EmbeddingNode(BitNetModel model, bool enableCache = false, InferenceConfig? inferenceConfig = null)
         {
             ArgumentNullException.ThrowIfNull(model);
+            ArgumentNullException.ThrowIfNull(inferenceConfig);
 
             this.model = model;
             EnableCache = enableCache;
-            InferenceConfig = inferenceConfig ?? CreateDefaultInferenceConfig();
+            InferenceConfig = inferenceConfig;
             tokenEmbedding = model.GlobalTensors?.TokenEmbedding ?? throw new InvalidOperationException("The model must be loaded before the embedding node can be created.");
-
-            if (InferenceConfig.Backend != InferenceBackend.CPU)
-            {
-                throw new NotSupportedException($"Embedding backend '{InferenceConfig.Backend}' is not implemented yet.");
-            }
 
             if (tokenEmbedding.TensorType != GGUFTensorType.GGML_TYPE_F16)
             {
@@ -53,11 +49,6 @@ namespace BitNetSharp.Nodes
             }
 
             isInitialized = true;
-        }
-
-        private static InferenceConfig CreateDefaultInferenceConfig()
-        {
-            return new InferenceConfig(InferenceBackend.CPU, 1);
         }
 
         /// <summary>

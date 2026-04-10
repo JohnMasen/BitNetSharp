@@ -22,7 +22,7 @@ namespace BitNetSharp.Core
             ThreadCount = threadCount;
         }
 
-        public string Backend => Nodes.InferenceBackendExtensions.ToBackendName(Nodes.InferenceBackend.SIMD);
+        public string Backend => "SIMD";
 
         public int ThreadCount { get; }
 

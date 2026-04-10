@@ -42,6 +42,7 @@ namespace BitNetSharp
         {
             ArgumentNullException.ThrowIfNull(model);
             ArgumentNullException.ThrowIfNull(memoryManager);
+            ArgumentNullException.ThrowIfNull(inferenceConfig);
 
             if (model.Config is null)
             {
@@ -50,11 +51,11 @@ namespace BitNetSharp
 
             this.model = model;
             tokenizer = model.Tokenizer ?? throw new InvalidOperationException("The model must be loaded before the runtime can be created.");
-            InferenceConfig = inferenceConfig ?? new InferenceConfig(InferenceBackend.CPU, 1);
+            InferenceConfig = inferenceConfig;
             this.enableCache = enableCache;
-            opProvider = CreateOpProvider(InferenceConfig);
+            opProvider = InferenceConfig.OPProvider;
             session = new BitNetSession(model, memoryManager);
-            embeddingNode = new EmbeddingNode(model, enableCache: enableCache, inferenceConfig: new InferenceConfig(InferenceBackend.CPU, 1));
+            embeddingNode = new EmbeddingNode(model, enableCache: enableCache, inferenceConfig: InferenceConfig);
             embeddingNode.Init();
 
             attentionNormNodes = new RmsNormNode[model.Layers.Count];
@@ -165,17 +166,6 @@ namespace BitNetSharp
             session.Dispose();
             disposed = true;
             GC.SuppressFinalize(this);
-        }
-
-        private static IOPProvider CreateOpProvider(InferenceConfig inferenceConfig)
-        {
-            return inferenceConfig.Backend switch
-            {
-                InferenceBackend.CPU => new CPUDefaultOPProvider(inferenceConfig.ThreadCount),
-                InferenceBackend.Tensor => new CPUTensorOPProvider(inferenceConfig.ThreadCount),
-                InferenceBackend.SIMD => new CPUSimdOPProvider(inferenceConfig.ThreadCount),
-                _ => throw new NotSupportedException($"Backend '{inferenceConfig.Backend}' is not implemented yet."),
-            };
         }
 
         /// <summary>

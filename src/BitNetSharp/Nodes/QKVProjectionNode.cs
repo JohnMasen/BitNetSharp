@@ -33,6 +33,7 @@ namespace BitNetSharp.Nodes
             ArgumentNullException.ThrowIfNull(queryTensor);
             ArgumentNullException.ThrowIfNull(keyTensor);
             ArgumentNullException.ThrowIfNull(valueTensor);
+            ArgumentNullException.ThrowIfNull(inferenceConfig);
 
             if (model.Config is null)
             {
@@ -44,14 +45,8 @@ namespace BitNetSharp.Nodes
             this.keyTensor = keyTensor;
             this.valueTensor = valueTensor;
             EnableCache = enableCache;
-            InferenceConfig = inferenceConfig ?? CreateDefaultInferenceConfig();
-            opProvider = InferenceConfig.Backend switch
-            {
-                Nodes.InferenceBackend.CPU => new CPUDefaultOPProvider(InferenceConfig.ThreadCount),
-                Nodes.InferenceBackend.Tensor => new CPUTensorOPProvider(InferenceConfig.ThreadCount),
-                Nodes.InferenceBackend.SIMD => new CPUSimdOPProvider(InferenceConfig.ThreadCount),
-                _ => throw new NotSupportedException($"Backend '{InferenceConfig.Backend}' is not implemented yet."),
-            };
+            InferenceConfig = inferenceConfig;
+            opProvider = InferenceConfig.OPProvider;
 
             int embeddingLength = checked((int)model.Config.EmbeddingLength);
             int keyValueLength = checked((int)model.Config.KeyValueProjectionSize);
@@ -74,11 +69,6 @@ namespace BitNetSharp.Nodes
             }
 
             isInitialized = true;
-        }
-
-        private static Nodes.InferenceConfig CreateDefaultInferenceConfig()
-        {
-            return new Nodes.InferenceConfig(Nodes.InferenceBackend.SIMD, Nodes.InferenceConfig.AutoThreadCount);
         }
 
         /// <summary>

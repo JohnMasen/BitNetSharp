@@ -39,14 +39,14 @@ public class QKVProjectionNodeBenchmarks
         };
         BenchmarkDataHelper.FillDeterministicValues(session.RmsNorm.Span, 3);
 
-        cpuSingleThreadNode = CreateNode(layerDefinition, InferenceBackend.CPU, 1);
-        cpuMultiThreadNode = CreateNode(layerDefinition, InferenceBackend.CPU, InferenceConfig.AutoThreadCount);
-        tensorSingleThreadNode = CreateNode(layerDefinition, InferenceBackend.Tensor, 1);
-        tensorMultiThreadNode = CreateNode(layerDefinition, InferenceBackend.Tensor, InferenceConfig.AutoThreadCount);
+        cpuSingleThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Cpu(1));
+        cpuMultiThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Cpu(InferenceConfig.AutoThreadCount));
+        tensorSingleThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Tensor(1));
+        tensorMultiThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Tensor(InferenceConfig.AutoThreadCount));
         if (Avx.IsSupported && Avx2.IsSupported)
         {
-            simdSingleThreadNode = CreateNode(layerDefinition, InferenceBackend.SIMD, 1);
-            simdMultiThreadNode = CreateNode(layerDefinition, InferenceBackend.SIMD, InferenceConfig.AutoThreadCount);
+            simdSingleThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Simd(1));
+            simdMultiThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Simd(InferenceConfig.AutoThreadCount));
         }
     }
 
@@ -100,7 +100,7 @@ public class QKVProjectionNodeBenchmarks
         return Run(simdMultiThreadNode);
     }
 
-    private QKVProjectionNode CreateNode(BitNetLayerDefinition layerDefinition, InferenceBackend backend, int threadCount)
+    private QKVProjectionNode CreateNode(BitNetLayerDefinition layerDefinition, InferenceConfig inferenceConfig)
     {
         var node = new QKVProjectionNode(
             model!,
@@ -108,7 +108,7 @@ public class QKVProjectionNodeBenchmarks
             layerDefinition.AttentionKeyWeight,
             layerDefinition.AttentionValueWeight,
             enableCache: true,
-            inferenceConfig: new InferenceConfig(backend, threadCount));
+            inferenceConfig: inferenceConfig);
         node.Init();
         return node;
     }

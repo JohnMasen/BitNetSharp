@@ -39,14 +39,14 @@ public class ResidualNodeBenchmarks
         BenchmarkDataHelper.FillDeterministicValues(session.Embedding.Span, 37);
         BenchmarkDataHelper.FillDeterministicValues(session.AttentionOutput.Span, 41);
 
-        cpuSingleThreadNode = CreateNode(InferenceBackend.CPU, 1);
-        cpuMultiThreadNode = CreateNode(InferenceBackend.CPU, InferenceConfig.AutoThreadCount);
-        tensorSingleThreadNode = CreateNode(InferenceBackend.Tensor, 1);
-        tensorMultiThreadNode = CreateNode(InferenceBackend.Tensor, InferenceConfig.AutoThreadCount);
+        cpuSingleThreadNode = CreateNode(BenchmarkInferenceConfigs.Cpu(1));
+        cpuMultiThreadNode = CreateNode(BenchmarkInferenceConfigs.Cpu(InferenceConfig.AutoThreadCount));
+        tensorSingleThreadNode = CreateNode(BenchmarkInferenceConfigs.Tensor(1));
+        tensorMultiThreadNode = CreateNode(BenchmarkInferenceConfigs.Tensor(InferenceConfig.AutoThreadCount));
         if (Avx.IsSupported && Avx2.IsSupported)
         {
-            simdSingleThreadNode = CreateNode(InferenceBackend.SIMD, 1);
-            simdMultiThreadNode = CreateNode(InferenceBackend.SIMD, InferenceConfig.AutoThreadCount);
+            simdSingleThreadNode = CreateNode(BenchmarkInferenceConfigs.Simd(1));
+            simdMultiThreadNode = CreateNode(BenchmarkInferenceConfigs.Simd(InferenceConfig.AutoThreadCount));
         }
     }
 
@@ -100,9 +100,9 @@ public class ResidualNodeBenchmarks
         return Run(simdMultiThreadNode);
     }
 
-    private ResidualNode CreateNode(InferenceBackend backend, int threadCount)
+    private ResidualNode CreateNode(InferenceConfig inferenceConfig)
     {
-        var node = new ResidualNode(model!, new InferenceConfig(backend, threadCount));
+        var node = new ResidualNode(model!, inferenceConfig);
         node.Init();
         return node;
     }

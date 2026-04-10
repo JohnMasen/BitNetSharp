@@ -28,14 +28,14 @@ public class BitNetRuntimeInferenceBenchmarks
         model = new BitNetModel();
         model.Load(BenchmarkProjectPaths.ModelPath);
         memoryManager = new BitNetMemoryManager();
-        cpuSingleThreadRuntime = CreateRuntime(InferenceBackend.CPU, 1);
-        cpuMultiThreadRuntime = CreateRuntime(InferenceBackend.CPU, InferenceConfig.AutoThreadCount);
-        tensorSingleThreadRuntime = CreateRuntime(InferenceBackend.Tensor, 1);
-        tensorMultiThreadRuntime = CreateRuntime(InferenceBackend.Tensor, InferenceConfig.AutoThreadCount);
+        cpuSingleThreadRuntime = CreateRuntime(BenchmarkInferenceConfigs.Cpu(1));
+        cpuMultiThreadRuntime = CreateRuntime(BenchmarkInferenceConfigs.Cpu(InferenceConfig.AutoThreadCount));
+        tensorSingleThreadRuntime = CreateRuntime(BenchmarkInferenceConfigs.Tensor(1));
+        tensorMultiThreadRuntime = CreateRuntime(BenchmarkInferenceConfigs.Tensor(InferenceConfig.AutoThreadCount));
         if (Avx.IsSupported && Avx2.IsSupported)
         {
-            simdSingleThreadRuntime = CreateRuntime(InferenceBackend.SIMD, 1);
-            simdMultiThreadRuntime = CreateRuntime(InferenceBackend.SIMD, InferenceConfig.AutoThreadCount);
+            simdSingleThreadRuntime = CreateRuntime(BenchmarkInferenceConfigs.Simd(1));
+            simdMultiThreadRuntime = CreateRuntime(BenchmarkInferenceConfigs.Simd(InferenceConfig.AutoThreadCount));
         }
     }
 
@@ -90,8 +90,8 @@ public class BitNetRuntimeInferenceBenchmarks
         return simdMultiThreadRuntime.InferenceTokenId(InputTokenId);
     }
 
-    private BitNetRuntime CreateRuntime(InferenceBackend backend, int threadCount)
+    private BitNetRuntime CreateRuntime(InferenceConfig inferenceConfig)
     {
-        return new BitNetRuntime(model!, memoryManager!, new InferenceConfig(backend, threadCount));
+        return new BitNetRuntime(model!, memoryManager!, inferenceConfig);
     }
 }

@@ -14,54 +14,48 @@ namespace BitNetSharp.Tests
         private static readonly Lazy<AttentionVectorsDocument> AttentionVectorsDocumentCache = new(LoadAttentionVectorsDocument);
 
         [TestMethod]
-        public void Attention_DefaultConfig_SimdAutoThreads()
+        public void Attention_ProvidedConfig_UsesConfiguredProvider()
         {
             using var model = TestModelFactory.LoadModel();
             var layerDefinition = model.GetLayer(0);
+            var inferenceConfig = TestInferenceConfigs.Simd(BitNetSharp.Nodes.InferenceConfig.AutoThreadCount);
             // The current test GGUF does not contain optional attn_output.scale / attn_output.bias tensors yet,
             // so these tests intentionally omit those constructor arguments until a model with them is available.
             var node = new BitNetSharp.Nodes.AttentionNode(
                 model,
                 layerDefinition.AttentionSubNorm,
-                layerDefinition.AttentionOutputWeight);
+                layerDefinition.AttentionOutputWeight,
+                inferenceConfig: inferenceConfig);
 
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceBackend.SIMD, node.InferenceConfig.Backend);
+            Assert.AreEqual(TestInferenceConfigs.SimdBackend, node.InferenceConfig.Backend);
             Assert.AreEqual(BitNetSharp.Nodes.InferenceConfig.AutoThreadCount, node.InferenceConfig.ThreadCount);
         }
 
         [TestMethod]
-        public void Attention_NullConfig_CreatesNewInstance()
+        public void Attention_NullConfig_Throws()
         {
             using var model = TestModelFactory.LoadModel();
             var layerDefinition = model.GetLayer(0);
-            var firstNode = new BitNetSharp.Nodes.AttentionNode(
-                model,
-                layerDefinition.AttentionSubNorm,
-                layerDefinition.AttentionOutputWeight,
-                inferenceConfig: null);
-            var secondNode = new BitNetSharp.Nodes.AttentionNode(
-                model,
-                layerDefinition.AttentionSubNorm,
-                layerDefinition.AttentionOutputWeight,
-                inferenceConfig: null);
 
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceBackend.SIMD, firstNode.InferenceConfig.Backend);
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceConfig.AutoThreadCount, firstNode.InferenceConfig.ThreadCount);
-            Assert.AreNotSame(firstNode.InferenceConfig, secondNode.InferenceConfig);
+            Assert.ThrowsExactly<ArgumentNullException>(() => new BitNetSharp.Nodes.AttentionNode(
+                model,
+                layerDefinition.AttentionSubNorm,
+                layerDefinition.AttentionOutputWeight,
+                inferenceConfig: null));
         }
 
         [TestMethod]
         [DynamicData(nameof(GetAttentionCaseIndices))]
         public void Attention_SubNormMatchesBaseline_CPU(int caseIndex)
         {
-            VerifyAttentionSubNormMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.CPU);
+            VerifyAttentionSubNormMatchesBaseline(caseIndex, TestInferenceConfigs.CpuBackend);
         }
 
         [TestMethod]
         [DynamicData(nameof(GetAttentionCaseIndices))]
         public void Attention_SubNormMatchesBaseline_Tensor(int caseIndex)
         {
-            VerifyAttentionSubNormMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.Tensor);
+            VerifyAttentionSubNormMatchesBaseline(caseIndex, TestInferenceConfigs.TensorBackend);
         }
 
         [TestMethod]
@@ -69,21 +63,21 @@ namespace BitNetSharp.Tests
         public void Attention_SubNormMatchesBaseline_SIMD(int caseIndex)
         {
             EnsureAvx2Supported();
-            VerifyAttentionSubNormMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.SIMD);
+            VerifyAttentionSubNormMatchesBaseline(caseIndex, TestInferenceConfigs.SimdBackend);
         }
 
         [TestMethod]
         [DynamicData(nameof(GetAttentionCaseIndices))]
         public void Attention_OutputMatchesBaseline_CPU(int caseIndex)
         {
-            VerifyAttentionOutputMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.CPU);
+            VerifyAttentionOutputMatchesBaseline(caseIndex, TestInferenceConfigs.CpuBackend);
         }
 
         [TestMethod]
         [DynamicData(nameof(GetAttentionCaseIndices))]
         public void Attention_OutputMatchesBaseline_Tensor(int caseIndex)
         {
-            VerifyAttentionOutputMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.Tensor);
+            VerifyAttentionOutputMatchesBaseline(caseIndex, TestInferenceConfigs.TensorBackend);
         }
 
         [TestMethod]
@@ -91,29 +85,29 @@ namespace BitNetSharp.Tests
         public void Attention_OutputMatchesBaseline_SIMD(int caseIndex)
         {
             EnsureAvx2Supported();
-            VerifyAttentionOutputMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.SIMD);
+            VerifyAttentionOutputMatchesBaseline(caseIndex, TestInferenceConfigs.SimdBackend);
         }
 
         [TestMethod]
         public void Attention_CPU_MultiThreadMatchesSingleThread()
         {
-            VerifyAttentionMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.CPU);
+            VerifyAttentionMultiThreadMatchesSingleThread(TestInferenceConfigs.CpuBackend);
         }
 
         [TestMethod]
         public void Attention_Tensor_MultiThreadMatchesSingleThread()
         {
-            VerifyAttentionMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.Tensor);
+            VerifyAttentionMultiThreadMatchesSingleThread(TestInferenceConfigs.TensorBackend);
         }
 
         [TestMethod]
         public void Attention_SIMD_MultiThreadMatchesSingleThread()
         {
             EnsureAvx2Supported();
-            VerifyAttentionMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.SIMD);
+            VerifyAttentionMultiThreadMatchesSingleThread(TestInferenceConfigs.SimdBackend);
         }
 
-        private static void VerifyAttentionSubNormMatchesBaseline(int caseIndex, BitNetSharp.Nodes.InferenceBackend backend)
+        private static void VerifyAttentionSubNormMatchesBaseline(int caseIndex, string backend)
         {
             using var model = TestModelFactory.LoadModel();
             AttentionCase testCase = GetAttentionCase(caseIndex);
@@ -122,7 +116,7 @@ namespace BitNetSharp.Tests
                 model,
                 layerDefinition.AttentionSubNorm,
                 layerDefinition.AttentionOutputWeight,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 1));
             var context = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             SetProjection(context, testCase);
 
@@ -133,7 +127,7 @@ namespace BitNetSharp.Tests
             AssertFloatArraysAreClose(testCase.FirstLayerAttnSubNorm.Values.ToArray(), actual.Span.ToArray(), 1e-6f, $"token {testCase.TokenId} ({testCase.TokenText})");
         }
 
-        private static void VerifyAttentionOutputMatchesBaseline(int caseIndex, BitNetSharp.Nodes.InferenceBackend backend)
+        private static void VerifyAttentionOutputMatchesBaseline(int caseIndex, string backend)
         {
             using var model = TestModelFactory.LoadModel();
             AttentionCase testCase = GetAttentionCase(caseIndex);
@@ -142,7 +136,7 @@ namespace BitNetSharp.Tests
                 model,
                 layerDefinition.AttentionSubNorm,
                 layerDefinition.AttentionOutputWeight,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 1));
             var context = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             SetProjection(context, testCase);
 
@@ -153,7 +147,7 @@ namespace BitNetSharp.Tests
             AssertFloatArraysAreClose(testCase.FirstLayerAttnOutput.Values.ToArray(), actual.Span.ToArray(), 1e-4f, $"token {testCase.TokenId} ({testCase.TokenText})");
         }
 
-        private static void VerifyAttentionMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend backend)
+        private static void VerifyAttentionMultiThreadMatchesSingleThread(string backend)
         {
             using var model = TestModelFactory.LoadModel();
             AttentionCase testCase = GetAttentionCase(0);
@@ -162,12 +156,12 @@ namespace BitNetSharp.Tests
                 model,
                 layerDefinition.AttentionSubNorm,
                 layerDefinition.AttentionOutputWeight,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 1));
             var multiThreadLayer = new BitNetSharp.Nodes.AttentionNode(
                 model,
                 layerDefinition.AttentionSubNorm,
                 layerDefinition.AttentionOutputWeight,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 2));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 2));
             var singleThreadContext = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             var multiThreadContext = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             SetProjection(singleThreadContext, testCase);
@@ -192,13 +186,13 @@ namespace BitNetSharp.Tests
                 model,
                 layerDefinition.AttentionSubNorm,
                 layerDefinition.AttentionOutputWeight,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: TestInferenceConfigs.Cpu(1));
             var cachedNode = new BitNetSharp.Nodes.AttentionNode(
                 model,
                 layerDefinition.AttentionSubNorm,
                 layerDefinition.AttentionOutputWeight,
                 enableCache: true,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: TestInferenceConfigs.Cpu(1));
             var uncachedContext = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             SetProjection(uncachedContext, testCase);
             var cachedContext = TestModelFactory.CreateSession(model, token: testCase.TokenId);
@@ -224,7 +218,7 @@ namespace BitNetSharp.Tests
                 model,
                 layerDefinition.AttentionSubNorm,
                 layerDefinition.AttentionOutputWeight,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: TestInferenceConfigs.Cpu(1));
             var context = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             SetProjection(context, testCase);
 

@@ -39,25 +39,25 @@ public class RmsNormNodeBenchmarks
             model,
             normTensor,
             enableCache: true,
-            inferenceConfig: new InferenceConfig(InferenceBackend.CPU, 1));
+            inferenceConfig: BenchmarkInferenceConfigs.Cpu(1));
         cpuSingleThreadNode.Init();
         cpuMultiThreadNode = new RmsNormNode(
             model,
             normTensor,
             enableCache: true,
-            inferenceConfig: new InferenceConfig(InferenceBackend.CPU, InferenceConfig.AutoThreadCount));
+            inferenceConfig: BenchmarkInferenceConfigs.Cpu(InferenceConfig.AutoThreadCount));
         cpuMultiThreadNode.Init();
         tensorSingleThreadNode = new RmsNormNode(
             model,
             normTensor,
             enableCache: true,
-            inferenceConfig: new InferenceConfig(InferenceBackend.Tensor, 1));
+            inferenceConfig: BenchmarkInferenceConfigs.Tensor(1));
         tensorSingleThreadNode.Init();
         tensorMultiThreadNode = new RmsNormNode(
             model,
             normTensor,
             enableCache: true,
-            inferenceConfig: new InferenceConfig(InferenceBackend.Tensor, InferenceConfig.AutoThreadCount));
+            inferenceConfig: BenchmarkInferenceConfigs.Tensor(InferenceConfig.AutoThreadCount));
         tensorMultiThreadNode.Init();
         if (Avx.IsSupported && Avx2.IsSupported)
         {
@@ -65,13 +65,13 @@ public class RmsNormNodeBenchmarks
                 model,
                 normTensor,
                 enableCache: true,
-                inferenceConfig: new InferenceConfig(InferenceBackend.SIMD, 1));
+                inferenceConfig: BenchmarkInferenceConfigs.Simd(1));
             simdSingleThreadNode.Init();
             simdMultiThreadNode = new RmsNormNode(
                 model,
                 normTensor,
                 enableCache: true,
-                inferenceConfig: new InferenceConfig(InferenceBackend.SIMD, InferenceConfig.AutoThreadCount));
+                inferenceConfig: BenchmarkInferenceConfigs.Simd(InferenceConfig.AutoThreadCount));
             simdMultiThreadNode.Init();
         }
     }

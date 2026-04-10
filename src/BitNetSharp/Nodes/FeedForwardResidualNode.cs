@@ -16,6 +16,7 @@ namespace BitNetSharp.Nodes
         public FeedForwardResidualNode(BitNetModel model, Nodes.InferenceConfig? inferenceConfig = null)
         {
             ArgumentNullException.ThrowIfNull(model);
+            ArgumentNullException.ThrowIfNull(inferenceConfig);
 
             if (model.Config is null)
             {
@@ -23,14 +24,8 @@ namespace BitNetSharp.Nodes
             }
 
             this.model = model;
-            InferenceConfig = inferenceConfig ?? CreateDefaultInferenceConfig();
-            opProvider = InferenceConfig.Backend switch
-            {
-                Nodes.InferenceBackend.CPU => new CPUDefaultOPProvider(InferenceConfig.ThreadCount),
-                Nodes.InferenceBackend.Tensor => new CPUTensorOPProvider(InferenceConfig.ThreadCount),
-                Nodes.InferenceBackend.SIMD => new CPUSimdOPProvider(InferenceConfig.ThreadCount),
-                _ => throw new NotSupportedException($"Backend '{InferenceConfig.Backend}' is not implemented yet."),
-            };
+            InferenceConfig = inferenceConfig;
+            opProvider = InferenceConfig.OPProvider;
         }
 
         public Nodes.InferenceConfig InferenceConfig { get; }
@@ -38,11 +33,6 @@ namespace BitNetSharp.Nodes
         public void Init()
         {
             isInitialized = true;
-        }
-
-        private static Nodes.InferenceConfig CreateDefaultInferenceConfig()
-        {
-            return new Nodes.InferenceConfig(Nodes.InferenceBackend.CPU, 1);
         }
 
         /// <summary>

@@ -16,41 +16,37 @@ namespace BitNetSharp.Tests
         private static readonly Lazy<FeedForwardNormVectorsDocument> FeedForwardNormVectorsDocumentCache = new(LoadFeedForwardNormVectorsDocument);
 
         [TestMethod]
-        public void FeedForwardNorm_DefaultConfig_SimdSingleThread()
+        public void FeedForwardNorm_ProvidedConfig_UsesConfiguredProvider()
         {
             using var model = TestModelFactory.LoadModel();
             var layerDefinition = model.GetLayer(0);
-            var node = new BitNetSharp.Nodes.FeedForwardNormNode(model, layerDefinition.FeedForwardNorm);
+            var node = new BitNetSharp.Nodes.FeedForwardNormNode(model, layerDefinition.FeedForwardNorm, inferenceConfig: TestInferenceConfigs.Simd(1));
 
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceBackend.SIMD, node.InferenceConfig.Backend);
+            Assert.AreEqual(TestInferenceConfigs.SimdBackend, node.InferenceConfig.Backend);
             Assert.AreEqual(1, node.InferenceConfig.ThreadCount);
         }
 
         [TestMethod]
-        public void FeedForwardNorm_NullConfig_CreatesNewInstance()
+        public void FeedForwardNorm_NullConfig_Throws()
         {
             using var model = TestModelFactory.LoadModel();
             var layerDefinition = model.GetLayer(0);
-            var firstNode = new BitNetSharp.Nodes.FeedForwardNormNode(model, layerDefinition.FeedForwardNorm, inferenceConfig: null);
-            var secondNode = new BitNetSharp.Nodes.FeedForwardNormNode(model, layerDefinition.FeedForwardNorm, inferenceConfig: null);
 
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceBackend.SIMD, firstNode.InferenceConfig.Backend);
-            Assert.AreEqual(1, firstNode.InferenceConfig.ThreadCount);
-            Assert.AreNotSame(firstNode.InferenceConfig, secondNode.InferenceConfig);
+            Assert.ThrowsExactly<ArgumentNullException>(() => new BitNetSharp.Nodes.FeedForwardNormNode(model, layerDefinition.FeedForwardNorm, inferenceConfig: null));
         }
 
         [TestMethod]
         [DynamicData(nameof(GetFeedForwardNormCaseIndices))]
         public void FeedForwardNorm_BaselineMatch_CPU(int caseIndex)
         {
-            VerifyFeedForwardNormMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.CPU);
+            VerifyFeedForwardNormMatchesBaseline(caseIndex, TestInferenceConfigs.CpuBackend);
         }
 
         [TestMethod]
         [DynamicData(nameof(GetFeedForwardNormCaseIndices))]
         public void FeedForwardNorm_BaselineMatch_Tensor(int caseIndex)
         {
-            VerifyFeedForwardNormMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.Tensor);
+            VerifyFeedForwardNormMatchesBaseline(caseIndex, TestInferenceConfigs.TensorBackend);
         }
 
         [TestMethod]
@@ -58,26 +54,26 @@ namespace BitNetSharp.Tests
         public void FeedForwardNorm_BaselineMatch_SIMD(int caseIndex)
         {
             EnsureAvx2Supported();
-            VerifyFeedForwardNormMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.SIMD);
+            VerifyFeedForwardNormMatchesBaseline(caseIndex, TestInferenceConfigs.SimdBackend);
         }
 
         [TestMethod]
         public void FeedForwardNorm_CPU_MultiThreadMatchesSingleThread()
         {
-            VerifyFeedForwardNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.CPU);
+            VerifyFeedForwardNormMultiThreadMatchesSingleThread(TestInferenceConfigs.CpuBackend);
         }
 
         [TestMethod]
         public void FeedForwardNorm_Tensor_MultiThreadMatchesSingleThread()
         {
-            VerifyFeedForwardNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.Tensor);
+            VerifyFeedForwardNormMultiThreadMatchesSingleThread(TestInferenceConfigs.TensorBackend);
         }
 
         [TestMethod]
         public void FeedForwardNorm_SIMD_MultiThreadMatchesSingleThread()
         {
             EnsureAvx2Supported();
-            VerifyFeedForwardNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.SIMD);
+            VerifyFeedForwardNormMultiThreadMatchesSingleThread(TestInferenceConfigs.SimdBackend);
         }
 
         [TestMethod]
@@ -89,7 +85,7 @@ namespace BitNetSharp.Tests
             var node = new BitNetSharp.Nodes.FeedForwardNormNode(
                 model,
                 layerDefinition.FeedForwardNorm,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(BitNetSharp.Nodes.InferenceBackend.CPU, 1));
+                inferenceConfig: TestInferenceConfigs.Cpu(1));
             var session = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             testCase.FirstLayerFfn.FeedForwardInput.CopyTo(session.FeedForwardInput.Span);
 
@@ -104,7 +100,7 @@ namespace BitNetSharp.Tests
             };
         }
 
-        private static void VerifyFeedForwardNormMatchesBaseline(int caseIndex, BitNetSharp.Nodes.InferenceBackend backend)
+        private static void VerifyFeedForwardNormMatchesBaseline(int caseIndex, string backend)
         {
             using var model = TestModelFactory.LoadModel();
             FeedForwardNormCase testCase = GetFeedForwardNormCase(caseIndex);
@@ -112,7 +108,7 @@ namespace BitNetSharp.Tests
             var node = new BitNetSharp.Nodes.FeedForwardNormNode(
                 model,
                 layerDefinition.FeedForwardNorm,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 1));
             var session = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             testCase.FirstLayerFfn.FeedForwardInput.CopyTo(session.FeedForwardInput.Span);
 
@@ -122,7 +118,7 @@ namespace BitNetSharp.Tests
             AssertFloatArraysAreClose(testCase.FirstLayerFfn.FeedForwardNorm, session.FeedForwardNorm.Span.ToArray(), 1e-6f, $"token {testCase.TokenId} ({testCase.TokenText})");
         }
 
-        private static void VerifyFeedForwardNormMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend backend)
+        private static void VerifyFeedForwardNormMultiThreadMatchesSingleThread(string backend)
         {
             using var model = TestModelFactory.LoadModel();
             FeedForwardNormCase testCase = GetFeedForwardNormCase(DebugCaseIndex);
@@ -130,11 +126,11 @@ namespace BitNetSharp.Tests
             var singleThreadNode = new BitNetSharp.Nodes.FeedForwardNormNode(
                 model,
                 layerDefinition.FeedForwardNorm,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 1));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 1));
             var multiThreadNode = new BitNetSharp.Nodes.FeedForwardNormNode(
                 model,
                 layerDefinition.FeedForwardNorm,
-                inferenceConfig: new BitNetSharp.Nodes.InferenceConfig(backend, 2));
+                inferenceConfig: TestInferenceConfigs.Create(backend, 2));
             var singleThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             var multiThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             testCase.FirstLayerFfn.FeedForwardInput.CopyTo(singleThreadSession.FeedForwardInput.Span);
