@@ -38,12 +38,6 @@ namespace BitNetSharp.Tests
         }
 
         [TestMethod]
-        public void Residual_MatchesBaseline_CPU_DebugCase()
-        {
-            VerifyResidualMatchesBaselineCpu(DebugCaseIndex);
-        }
-
-        [TestMethod]
         [DynamicData(nameof(GetResidualCaseIndices))]
         public void Residual_MatchesBaseline_CPU(int caseIndex)
         {

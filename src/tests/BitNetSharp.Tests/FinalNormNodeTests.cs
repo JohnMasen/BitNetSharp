@@ -38,12 +38,6 @@ namespace BitNetSharp.Tests
         }
 
         [TestMethod]
-        public void FinalNorm_MatchesBaseline_CPU_DebugCase()
-        {
-            VerifyFinalNormMatchesBaseline(DebugCaseIndex, BitNetSharp.Nodes.InferenceBackend.CPU);
-        }
-
-        [TestMethod]
         [DynamicData(nameof(GetFinalNormCaseIndices))]
         public void FinalNorm_MatchesBaseline_CPU(int caseIndex)
         {

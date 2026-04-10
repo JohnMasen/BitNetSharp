@@ -57,12 +57,6 @@ namespace BitNetSharp.Tests
         }
 
         [TestMethod]
-        public void FeedForward_SubNormMatchesBaseline_CPU_DebugCase()
-        {
-            VerifyFeedForwardSubNormMatchesBaseline(DebugCaseIndex, BitNetSharp.Nodes.InferenceBackend.CPU);
-        }
-
-        [TestMethod]
         [DynamicData(nameof(GetFeedForwardCaseIndices))]
         public void FeedForward_SubNormMatchesBaseline_CPU(int caseIndex)
         {
@@ -82,12 +76,6 @@ namespace BitNetSharp.Tests
         {
             EnsureAvx2Supported();
             VerifyFeedForwardSubNormMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.SIMD);
-        }
-
-        [TestMethod]
-        public void FeedForward_OutputMatchesBaseline_CPU_DebugCase()
-        {
-            VerifyFeedForwardOutputMatchesBaseline(DebugCaseIndex, BitNetSharp.Nodes.InferenceBackend.CPU);
         }
 
         [TestMethod]

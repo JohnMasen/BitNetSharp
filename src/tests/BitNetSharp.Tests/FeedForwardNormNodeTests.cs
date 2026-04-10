@@ -40,12 +40,6 @@ namespace BitNetSharp.Tests
         }
 
         [TestMethod]
-        public void FeedForwardNorm_BaselineMatch_CPU_DebugCase()
-        {
-            VerifyFeedForwardNormMatchesBaseline(DebugCaseIndex, BitNetSharp.Nodes.InferenceBackend.CPU);
-        }
-
-        [TestMethod]
         [DynamicData(nameof(GetFeedForwardNormCaseIndices))]
         public void FeedForwardNorm_BaselineMatch_CPU(int caseIndex)
         {

@@ -38,12 +38,6 @@ namespace BitNetSharp.Tests
         }
 
         [TestMethod]
-        public void LmHead_MatchesBaseline_CPU_DebugCase()
-        {
-            VerifyLmHeadMatchesBaseline(DebugCaseIndex, BitNetSharp.Nodes.InferenceBackend.CPU);
-        }
-
-        [TestMethod]
         [DynamicData(nameof(GetLmHeadCaseIndices))]
         public void LmHead_MatchesBaseline_CPU(int caseIndex)
         {

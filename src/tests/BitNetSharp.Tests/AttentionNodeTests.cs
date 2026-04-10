@@ -11,7 +11,6 @@ namespace BitNetSharp.Tests
     [DoNotParallelize]
     public sealed class AttentionNodeTests
     {
-        private const int DebugCaseIndex = 0;
         private static readonly Lazy<AttentionVectorsDocument> AttentionVectorsDocumentCache = new(LoadAttentionVectorsDocument);
 
         [TestMethod]
@@ -52,12 +51,6 @@ namespace BitNetSharp.Tests
         }
 
         [TestMethod]
-        public void Attention_SubNormMatchesBaseline_CPU_DebugCase()
-        {
-            VerifyAttentionSubNormMatchesBaselineCpu(DebugCaseIndex);
-        }
-
-        [TestMethod]
         [DynamicData(nameof(GetAttentionCaseIndices))]
         public void Attention_SubNormMatchesBaseline_CPU(int caseIndex)
         {
@@ -77,12 +70,6 @@ namespace BitNetSharp.Tests
         {
             EnsureAvx2Supported();
             VerifyAttentionSubNormMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.SIMD);
-        }
-
-        [TestMethod]
-        public void Attention_OutputMatchesBaseline_CPU_DebugCase()
-        {
-            VerifyAttentionOutputMatchesBaselineCpu(DebugCaseIndex);
         }
 
         [TestMethod]
@@ -126,11 +113,6 @@ namespace BitNetSharp.Tests
             VerifyAttentionMultiThreadMatchesSingleThread(BitNetSharp.Nodes.InferenceBackend.SIMD);
         }
 
-        private static void VerifyAttentionSubNormMatchesBaselineCpu(int caseIndex)
-        {
-            VerifyAttentionSubNormMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.CPU);
-        }
-
         private static void VerifyAttentionSubNormMatchesBaseline(int caseIndex, BitNetSharp.Nodes.InferenceBackend backend)
         {
             using var model = TestModelFactory.LoadModel();
@@ -149,11 +131,6 @@ namespace BitNetSharp.Tests
             Memory<float> actual = context.AttentionSubNorm;
 
             AssertFloatArraysAreClose(testCase.FirstLayerAttnSubNorm.Values.ToArray(), actual.Span.ToArray(), 1e-6f, $"token {testCase.TokenId} ({testCase.TokenText})");
-        }
-
-        private static void VerifyAttentionOutputMatchesBaselineCpu(int caseIndex)
-        {
-            VerifyAttentionOutputMatchesBaseline(caseIndex, BitNetSharp.Nodes.InferenceBackend.CPU);
         }
 
         private static void VerifyAttentionOutputMatchesBaseline(int caseIndex, BitNetSharp.Nodes.InferenceBackend backend)

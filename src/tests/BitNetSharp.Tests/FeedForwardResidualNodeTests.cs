@@ -38,12 +38,6 @@ namespace BitNetSharp.Tests
         }
 
         [TestMethod]
-        public void FeedForwardResidual_MatchesBaseline_CPU_DebugCase()
-        {
-            VerifyFeedForwardResidualMatchesBaseline(DebugCaseIndex, BitNetSharp.Nodes.InferenceBackend.CPU);
-        }
-
-        [TestMethod]
         [DynamicData(nameof(GetFeedForwardResidualCaseIndices))]
         public void FeedForwardResidual_MatchesBaseline_CPU(int caseIndex)
         {

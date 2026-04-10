@@ -33,11 +33,11 @@
 - Avoid writing pure wrapper methods with no logic or semantics; inline them unless they add real validation, branching, adaptation, or abstraction value.
 - For this repo, any temporary `BitNetRuntime.Inference` method added only to validate the single-token runtime chain, along with its tests, is expected to be deleted later after the runtime architecture evolves.
 - Do not save "currently only running unit tests, not performance tests" as a long-term preference; this is a temporary situation while the user's machine is busy.
-- For `IOPProvider1`, use `string` type for `Backend` instead of `char` or enum to allow for future expansion.
+- For `IOPProvider`, use `string` type for `Backend` instead of `char` or enum to allow for future expansion.
 - For this repo's OP provider design, prefer `CPUSimdOPProvider` to override `CreateRanges` for alignment-aware partitioning rather than pushing alignment choice into per-call parameters, to keep call sites simpler and SIMD-specific policy localized.
 - For this repo's OP provider design, avoid adding `IOPProvider2.CreateRanges` solely for SIMD-specific needs because that couples the interface to one implementation detail; prefer extension points that CPU/Tensor also meaningfully reuse.
 - For this repo's OP provider refactor, `IOPProvider2` still needs changes, but implementation work should follow an explicit modification strategy and future architecture plan rather than ad-hoc edits.
-- **Plan to move multithreading implementation back from `IOPProvider2` into `IOPProvider1`, prepare to deprecate `IOPProvider2`, design `Graph` next, and update current inference tests to call `IOPProvider1` only.**
+- **Plan to move multithreading implementation back from `IOPProvider2` into `IOPProvider`, prepare to deprecate `IOPProvider2`, design `Graph` next, and update current inference tests to call `IOPProvider` only.**
 - When migrating inference-related implementations, include sufficient comments to facilitate future design reference for the Graph.
 
 ## QKV Parallel Work Instructions

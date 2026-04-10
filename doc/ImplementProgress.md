@@ -53,3 +53,4 @@
 - 临时 `BitNetRuntime.Inference` 测试已补上对 `layer_vectors_pure.json` 中 `next_token_id` 的直接断言，当前既验证 runtime 编排链路一致性，也验证最终 decode 输出与 baseline 数据一致
 - `OPProviderBackendTests` 中针对 `IOPProvider2` 默认编排的临时测试已移除；当前 OP 相关测试聚焦具体 provider 的 `IOPProvider1` 行为与实际 node 路径
 - 默认开发节奏下，所有多 case 的数据驱动测试当前均只枚举第一个 case，以缩短回归时间；保留原有按 caseId 取数逻辑，后续需要扩大覆盖时可直接恢复 provider 枚举
+- 与首 case 数据驱动测试重复的专用 `DebugCase` 基线测试入口已移除；当前调试默认直接复用只跑首 case 的数据驱动测试

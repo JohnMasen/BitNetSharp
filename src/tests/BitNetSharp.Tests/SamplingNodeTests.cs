@@ -29,12 +29,6 @@ namespace BitNetSharp.Tests
         }
 
         [TestMethod]
-        public void SamplingNode_MatchesBaseline_DebugCase()
-        {
-            VerifySamplingMatchesBaseline(DebugCaseIndex);
-        }
-
-        [TestMethod]
         [DynamicData(nameof(GetSamplingCaseIndices))]
         public void SamplingNode_MatchesBaseline(int caseIndex)
         {
