@@ -73,7 +73,7 @@ namespace BitNetSharp.Core
 
             int groupCount = Math.Min(GetRequestedGroupCount(threadCount), itemCount);
             int alignmentItemCount = GetAlignmentItemCount(itemByteLength, alignmentByteLength);
-            List<WorkRange> ranges = new(groupCount);
+            WorkRange[] ranges = new WorkRange[groupCount];
             int startIndex = 0;
             for (int groupIndex = 0; groupIndex < groupCount; groupIndex++)
             {
@@ -86,11 +86,11 @@ namespace BitNetSharp.Core
                 }
 
                 int endIndex = startIndex + rangeLength;
-                ranges.Add(new WorkRange(startIndex, endIndex));
+                ranges[groupIndex] = new WorkRange(startIndex, endIndex);
                 startIndex = endIndex;
             }
 
-            return [.. ranges];
+            return ranges;
         }
 
         internal static WorkRange[] CreateRanges<T>(ReadOnlySpan<T> items, int threadCount = 0, int? alignmentByteLength = null)
