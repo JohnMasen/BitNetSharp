@@ -12,6 +12,8 @@ namespace BitNetSharp.Core
     /// </summary>
     public sealed class CPUSimdOPProvider : IOPProvider
     {
+        private static readonly Vector256<byte> v256_3 = Vector256.Create((byte)0b_0000_0011);
+        private static readonly Vector256<byte> v256_2 = Vector256.Create((byte)0b_0000_0010);
         public CPUSimdOPProvider(int threadCount = Nodes.InferenceConfig.AutoThreadCount)
         {
             if (threadCount < 0)
@@ -821,13 +823,12 @@ namespace BitNetSharp.Core
             Vector256<sbyte> data1 = Vector256.LoadUnsafe(ref MemoryMarshal.GetReference(dataBlock.Slice(32)));
             Vector256<sbyte> data2 = Vector256.LoadUnsafe(ref MemoryMarshal.GetReference(dataBlock.Slice(64)));
             Vector256<sbyte> data3 = Vector256.LoadUnsafe(ref MemoryMarshal.GetReference(dataBlock.Slice(96)));
-            Vector256<byte> bitMask = Vector256.Create((byte)0b_0000_0011);
             Vector256<byte> weight3 = Vector256.LoadUnsafe(ref MemoryMarshal.GetReference(weightBlock));
 
-            Vector256<byte> weight0 = NormalizeBitNetWeightCodes(Vector256.ShiftRightLogical(weight3, 6), bitMask);
-            Vector256<byte> weight1 = NormalizeBitNetWeightCodes(Vector256.ShiftRightLogical(weight3, 4), bitMask);
-            Vector256<byte> weight2 = NormalizeBitNetWeightCodes(Vector256.ShiftRightLogical(weight3, 2), bitMask);
-            weight3 = NormalizeBitNetWeightCodes(weight3, bitMask);
+            Vector256<byte> weight0 = NormalizeBitNetWeightCodes(Vector256.ShiftRightLogical(weight3, 6), v256_3);
+            Vector256<byte> weight1 = NormalizeBitNetWeightCodes(Vector256.ShiftRightLogical(weight3, 4), v256_3);
+            Vector256<byte> weight2 = NormalizeBitNetWeightCodes(Vector256.ShiftRightLogical(weight3, 2), v256_3);
+            weight3 = NormalizeBitNetWeightCodes(weight3, v256_3);
 
             return Sum4(ProcessBlock(data0, weight0), ProcessBlock(data1, weight1), ProcessBlock(data2, weight2), ProcessBlock(data3, weight3));
         }
@@ -855,8 +856,8 @@ namespace BitNetSharp.Core
         private static Vector256<byte> NormalizeBitNetWeightCodes(Vector256<byte> packedWeightCodes, Vector256<byte> bitMask)
         {
             Vector256<byte> weightCodes = Vector256.BitwiseAnd(packedWeightCodes, bitMask);
-            Vector256<byte> threeMask = Avx2.CompareEqual(weightCodes, Vector256.Create((byte)0b_0000_0011));
-            Vector256<byte> correction = Vector256.BitwiseAnd(threeMask, Vector256.Create((byte)0b_0000_0010));
+            Vector256<byte> threeMask = Avx2.CompareEqual(weightCodes, v256_3);
+            Vector256<byte> correction = Vector256.BitwiseAnd(threeMask, v256_2);
             return Avx2.Subtract(weightCodes, correction);
         }
     }
