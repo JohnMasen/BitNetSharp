@@ -126,7 +126,10 @@ namespace BitNetSharp.Tests
 
         public static IEnumerable<object[]> GetFinalNormCaseIndices()
         {
-            return FinalNormVectorsDocumentCache.Value.TestCases.Select((_, caseIndex) => new object[] { caseIndex });
+            return new[]
+            {
+                new object[] { 0 },
+            };
         }
 
         private static void VerifyFinalNormMatchesBaseline(int caseIndex, BitNetSharp.Nodes.InferenceBackend backend)

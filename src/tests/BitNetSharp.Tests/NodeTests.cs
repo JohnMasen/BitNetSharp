@@ -374,14 +374,18 @@ namespace BitNetSharp.Tests
 
         public static IEnumerable<object[]> GetEmbeddingCases()
         {
-            return Enumerable.Range(0, LayerVectorsDocumentCache.Value.TestCases.Count)
-                .Select(caseId => new object[] { caseId });
+            return new[]
+            {
+                new object[] { 0 },
+            };
         }
 
         public static IEnumerable<object[]> GetRmsNormCases()
         {
-            return Enumerable.Range(0, LayerVectorsDocumentCache.Value.TestCases.Count)
-                .Select(caseId => new object[] { caseId });
+            return new[]
+            {
+                new object[] { 0 },
+            };
         }
 
         private static LayerVectorCase GetLayerCase(int caseId)

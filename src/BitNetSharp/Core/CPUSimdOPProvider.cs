@@ -10,9 +10,9 @@ namespace BitNetSharp.Core
     /// <summary>
     /// Provides the SIMD-accelerated CPU implementation of math operations.
     /// </summary>
-    public sealed class CPUSimdOPProvider : IOPProvider2
+    public sealed class CPUSimdOPProvider : IOPProvider
     {
-        public CPUSimdOPProvider(int threadCount = global::BitNetSharp.Nodes.InferenceConfig.AutoThreadCount)
+        public CPUSimdOPProvider(int threadCount = Nodes.InferenceConfig.AutoThreadCount)
         {
             if (threadCount < 0)
             {
@@ -22,9 +22,14 @@ namespace BitNetSharp.Core
             ThreadCount = threadCount;
         }
 
-        public global::BitNetSharp.Nodes.InferenceBackend Backend => global::BitNetSharp.Nodes.InferenceBackend.SIMD;
+        public string Backend => Nodes.InferenceBackendExtensions.ToBackendName(Nodes.InferenceBackend.SIMD);
 
         public int ThreadCount { get; }
+
+        public (float ActivationScale, int ActivationSum) QuantizeBitNetActivations(ReadOnlyMemory<float> input, Memory<sbyte> quantizedValues)
+        {
+            return QuantizeBitNetActivations(input, quantizedValues, ThreadCount);
+        }
 
         public void Add(ReadOnlyMemory<float> input, ReadOnlyMemory<float> addend, Memory<float> output)
         {
@@ -40,11 +45,11 @@ namespace BitNetSharp.Core
                 return;
             }
 
-            ThreadHelper.ForEachRange(output.Span, (startIndex, endIndex) =>
+            ThreadHelper.ForEachRange(output.Length, (startIndex, endIndex) =>
                 FillAddRange(
                     input.Span.Slice(startIndex, endIndex - startIndex),
                     addend.Span.Slice(startIndex, endIndex - startIndex),
-                    output.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount, Vector256<float>.Count * sizeof(float));
+                    output.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount, sizeof(float), Vector256<float>.Count * sizeof(float));
         }
 
         public void ProjectBitNetI2(ReadOnlyMemory<float> input, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale, Memory<float> output)
@@ -119,12 +124,12 @@ namespace BitNetSharp.Core
                 return;
             }
 
-            ThreadHelper.ForEachRange(output.Span, (startIndex, endIndex) =>
+            ThreadHelper.ForEachRange(output.Length, (startIndex, endIndex) =>
                 FillRmsNormRange(
                     input.Span.Slice(startIndex, endIndex - startIndex),
                     normWeights.Span.Slice(startIndex, endIndex - startIndex),
                     inverseRootMeanSquare,
-                    output.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount, Vector256<float>.Count * sizeof(float));
+                    output.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount, sizeof(float), Vector256<float>.Count * sizeof(float));
         }
 
         public void ForwardLmHead(ReadOnlyMemory<float> input, ReadOnlyMemory<byte> embeddingWeights, int rowLength, int vocabularySize, Memory<float> output)
@@ -145,7 +150,9 @@ namespace BitNetSharp.Core
                     MemoryMarshal.Cast<byte, Half>(embeddingWeights.Span.Slice(startIndex * rowLength * sizeof(ushort), (endIndex - startIndex) * rowLength * sizeof(ushort))),
                     rowLength,
                     output.Span.Slice(startIndex, endIndex - startIndex)),
-                ThreadCount);
+                ThreadCount,
+                checked(rowLength * sizeof(ushort)),
+                Vector256<float>.Count * sizeof(float));
         }
 
         private void ExecuteForwardSoftmaxMemory(ReadOnlyMemory<float> input, Memory<float> output)
@@ -201,8 +208,8 @@ namespace BitNetSharp.Core
             }
 
             float inverseSum = (float)(1d / sum);
-            ThreadHelper.ForEachRange(output.Span, (startIndex, endIndex) =>
-                NormalizeSoftmaxOutputRange(output.Span.Slice(startIndex, endIndex - startIndex), inverseSum), ThreadCount, Vector256<float>.Count * sizeof(float));
+            ThreadHelper.ForEachRange(output.Length, (startIndex, endIndex) =>
+                NormalizeSoftmaxOutputRange(output.Span.Slice(startIndex, endIndex - startIndex), inverseSum), ThreadCount, sizeof(float), Vector256<float>.Count * sizeof(float));
         }
 
         private static void ForwardSoftmaxCore(ReadOnlySpan<float> input, Span<float> output)

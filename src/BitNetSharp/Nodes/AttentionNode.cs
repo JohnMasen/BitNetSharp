@@ -18,7 +18,7 @@ namespace BitNetSharp.Nodes
         private readonly BitNetTensorInfo outputTensor;
         private readonly BitNetTensorInfo? outputScaleTensor;
         private readonly BitNetTensorInfo? outputBiasTensor;
-        private readonly IOPProvider2 opProvider;
+        private readonly IOPProvider opProvider;
         private float[]? cachedSubNormWeights;
         private PackedProjectionWeights? cachedOutputWeights;
         private float[]? cachedOutputScaleValues;
@@ -55,7 +55,7 @@ namespace BitNetSharp.Nodes
             BitNetTensorInfo? outputScaleTensor = null,
             BitNetTensorInfo? outputBiasTensor = null,
             bool enableCache = false,
-            global::BitNetSharp.Nodes.InferenceConfig? inferenceConfig = null)
+            Nodes.InferenceConfig? inferenceConfig = null)
         {
             ArgumentNullException.ThrowIfNull(model);
             ArgumentNullException.ThrowIfNull(subNormTensor);
@@ -75,9 +75,9 @@ namespace BitNetSharp.Nodes
             InferenceConfig = inferenceConfig ?? CreateDefaultInferenceConfig();
             opProvider = InferenceConfig.Backend switch
             {
-                global::BitNetSharp.Nodes.InferenceBackend.CPU => new CPUDefaultOPProvider(InferenceConfig.ThreadCount),
-                global::BitNetSharp.Nodes.InferenceBackend.Tensor => new CPUTensorOPProvider(InferenceConfig.ThreadCount),
-                global::BitNetSharp.Nodes.InferenceBackend.SIMD => new CPUSimdOPProvider(InferenceConfig.ThreadCount),
+                Nodes.InferenceBackend.CPU => new CPUDefaultOPProvider(InferenceConfig.ThreadCount),
+                Nodes.InferenceBackend.Tensor => new CPUTensorOPProvider(InferenceConfig.ThreadCount),
+                Nodes.InferenceBackend.SIMD => new CPUSimdOPProvider(InferenceConfig.ThreadCount),
                 _ => throw new NotSupportedException($"Backend '{InferenceConfig.Backend}' is not implemented yet."),
             };
 
@@ -89,7 +89,7 @@ namespace BitNetSharp.Nodes
 
         public bool EnableCache { get; }
 
-        public global::BitNetSharp.Nodes.InferenceConfig InferenceConfig { get; }
+        public Nodes.InferenceConfig InferenceConfig { get; }
 
         public void Init()
         {
@@ -104,9 +104,9 @@ namespace BitNetSharp.Nodes
             isInitialized = true;
         }
 
-        private static global::BitNetSharp.Nodes.InferenceConfig CreateDefaultInferenceConfig()
+        private static Nodes.InferenceConfig CreateDefaultInferenceConfig()
         {
-            return new global::BitNetSharp.Nodes.InferenceConfig(global::BitNetSharp.Nodes.InferenceBackend.SIMD, global::BitNetSharp.Nodes.InferenceConfig.AutoThreadCount);
+            return new Nodes.InferenceConfig(Nodes.InferenceBackend.SIMD, Nodes.InferenceConfig.AutoThreadCount);
         }
 
         /// <summary>
@@ -145,7 +145,7 @@ namespace BitNetSharp.Nodes
                 PackedProjectionWeights cachedOutputWeights = EnsureCachedOutputWeights();
                 ReadOnlyMemory<float> cachedOutputScaleValues = TryEnsureCachedOutputScaleValues();
                 ReadOnlyMemory<float> cachedOutputBiasValues = TryEnsureCachedOutputBiasValues();
-                opProvider.ForwardAttention(query, key, value, EnsureCachedSubNormWeights().AsMemory(), model.Config!.AttentionLayerNormRmsEpsilon, cachedOutputWeights.PackedWeights, cachedOutputWeights.Scale, checked((int)model.Config.EmbeddingLength), checked((int)model.Config.KeyValueProjectionSize), checked((int)model.Config.AttentionHeadCount), checked((int)model.Config.AttentionKeyValueHeadCount), checked((int)model.Config.AttentionHeadDimension), subNorm, output, cachedOutputScaleValues, cachedOutputBiasValues);
+                ExecuteAttention(query, key, value, EnsureCachedSubNormWeights(), cachedOutputWeights, cachedOutputScaleValues.Span, cachedOutputBiasValues.Span, subNorm, output);
                 return;
             }
 
@@ -178,7 +178,27 @@ namespace BitNetSharp.Nodes
                 FillFloatValues(outputBiasTensorData.Memory.Span, outputBiasTensor.TensorType, outputBiasValues, "Attention output bias");
             }
 
-            opProvider.ForwardAttention(query, key, value, subNormWeights, model.Config!.AttentionLayerNormRmsEpsilon, outputWeights.PackedWeights, outputWeights.Scale, checked((int)model.Config.EmbeddingLength), checked((int)model.Config.KeyValueProjectionSize), checked((int)model.Config.AttentionHeadCount), checked((int)model.Config.AttentionKeyValueHeadCount), checked((int)model.Config.AttentionHeadDimension), subNorm, output, outputScaleValues, outputBiasValues);
+            ExecuteAttention(query, key, value, subNormWeights, outputWeights, outputScaleValues, outputBiasValues, subNorm, output);
+        }
+
+        private void ExecuteAttention(ReadOnlyMemory<float> query, ReadOnlyMemory<float> key, ReadOnlyMemory<float> value, ReadOnlyMemory<float> subNormWeights, PackedProjectionWeights outputWeights, ReadOnlySpan<float> outputScaleValues, ReadOnlySpan<float> outputBiasValues, Memory<float> subNorm, Memory<float> output)
+        {
+            int embeddingLength = checked((int)model.Config!.EmbeddingLength);
+            int keyValueLength = checked((int)model.Config.KeyValueProjectionSize);
+            int headCount = checked((int)model.Config.AttentionHeadCount);
+            int keyValueHeadCount = checked((int)model.Config.AttentionKeyValueHeadCount);
+            int headDimension = checked((int)model.Config.AttentionHeadDimension);
+
+            ValidateProjectionShape(query.Span, key.Span, value.Span);
+
+            using IMemoryOwner<float> attentionContextOwner = MemoryPool<float>.Shared.Rent(embeddingLength);
+            Memory<float> attentionContext = attentionContextOwner.Memory[..embeddingLength];
+            BuildSingleTokenAttentionContext(query, key, value, attentionContext, headCount, keyValueHeadCount, headDimension);
+
+            opProvider.ForwardRmsNorm(attentionContext, subNormWeights[..attentionContext.Length], model.Config.AttentionLayerNormRmsEpsilon, subNorm);
+            opProvider.ProjectBitNetI2(subNorm, outputWeights.PackedWeights, embeddingLength, outputWeights.Scale, output);
+            ApplyScale(output[..embeddingLength], outputScaleValues);
+            ApplyBias(output[..embeddingLength], outputBiasValues);
         }
 
         private void ValidateOutputScaleTensor()
@@ -223,6 +243,73 @@ namespace BitNetSharp.Nodes
         private static float RoundTripThroughHalf(float value)
         {
             return (float)(Half)value;
+        }
+
+        private void BuildSingleTokenAttentionContext(ReadOnlyMemory<float> query, ReadOnlyMemory<float> key, ReadOnlyMemory<float> value, Memory<float> context, int headCount, int keyValueHeadCount, int headDimension)
+        {
+            if (headCount % keyValueHeadCount != 0)
+            {
+                throw new InvalidOperationException("Attention head count must be divisible by the key/value head count.");
+            }
+
+            int groupSize = headCount / keyValueHeadCount;
+            float scoreScale = 1f / MathF.Sqrt(headDimension);
+            Span<float> attentionScore = stackalloc float[1];
+            Span<float> attentionWeight = stackalloc float[1];
+            for (int headIndex = 0; headIndex < headCount; headIndex++)
+            {
+                int sourceHeadIndex = headIndex / groupSize;
+                int queryOffset = headIndex * headDimension;
+                int keyOffset = sourceHeadIndex * headDimension;
+                int sourceOffset = sourceHeadIndex * headDimension;
+                int outputOffset = headIndex * headDimension;
+
+                attentionScore[0] = ComputeScaledAttentionScore(query.Span, queryOffset, key.Span, keyOffset, headDimension, scoreScale);
+                opProvider.ForwardSoftmax(attentionScore, attentionWeight);
+
+                for (int dimensionIndex = 0; dimensionIndex < headDimension; dimensionIndex++)
+                {
+                    context.Span[outputOffset + dimensionIndex] = RoundTripThroughHalf(value.Span[sourceOffset + dimensionIndex] * attentionWeight[0]);
+                }
+            }
+        }
+
+        private static void ApplyScale(Memory<float> output, ReadOnlySpan<float> scaleValues)
+        {
+            if (scaleValues.IsEmpty)
+            {
+                return;
+            }
+
+            float outputScale = scaleValues[0];
+            for (int index = 0; index < output.Length; index++)
+            {
+                output.Span[index] *= outputScale;
+            }
+        }
+
+        private static void ApplyBias(Memory<float> output, ReadOnlySpan<float> biasValues)
+        {
+            if (biasValues.IsEmpty)
+            {
+                return;
+            }
+
+            for (int index = 0; index < output.Length; index++)
+            {
+                output.Span[index] += biasValues[index];
+            }
+        }
+
+        private static float ComputeScaledAttentionScore(ReadOnlySpan<float> query, int queryOffset, ReadOnlySpan<float> key, int keyOffset, int headDimension, float scoreScale)
+        {
+            float dotProduct = 0f;
+            for (int dimensionIndex = 0; dimensionIndex < headDimension; dimensionIndex++)
+            {
+                dotProduct += query[queryOffset + dimensionIndex] * key[keyOffset + dimensionIndex];
+            }
+
+            return dotProduct * scoreScale;
         }
 
         private void ValidateProjectionShape(ReadOnlySpan<float> query, ReadOnlySpan<float> key, ReadOnlySpan<float> value)

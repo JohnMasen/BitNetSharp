@@ -12,11 +12,11 @@ namespace BitNetSharp.Nodes
     {
         private readonly BitNetModel model;
         private readonly BitNetTensorInfo tokenEmbedding;
-        private readonly IOPProvider2 opProvider;
+        private readonly IOPProvider opProvider;
         private byte[]? cachedEmbeddingWeights;
         private bool isInitialized;
 
-        public LmHeadNode(BitNetModel model, bool enableCache = false, global::BitNetSharp.Nodes.InferenceConfig? inferenceConfig = null)
+        public LmHeadNode(BitNetModel model, bool enableCache = false, Nodes.InferenceConfig? inferenceConfig = null)
         {
             ArgumentNullException.ThrowIfNull(model);
 
@@ -31,9 +31,9 @@ namespace BitNetSharp.Nodes
             InferenceConfig = inferenceConfig ?? CreateDefaultInferenceConfig();
             opProvider = InferenceConfig.Backend switch
             {
-                global::BitNetSharp.Nodes.InferenceBackend.CPU => new CPUDefaultOPProvider(InferenceConfig.ThreadCount),
-                global::BitNetSharp.Nodes.InferenceBackend.Tensor => new CPUTensorOPProvider(InferenceConfig.ThreadCount),
-                global::BitNetSharp.Nodes.InferenceBackend.SIMD => new CPUSimdOPProvider(InferenceConfig.ThreadCount),
+                Nodes.InferenceBackend.CPU => new CPUDefaultOPProvider(InferenceConfig.ThreadCount),
+                Nodes.InferenceBackend.Tensor => new CPUTensorOPProvider(InferenceConfig.ThreadCount),
+                Nodes.InferenceBackend.SIMD => new CPUSimdOPProvider(InferenceConfig.ThreadCount),
                 _ => throw new NotSupportedException($"Backend '{InferenceConfig.Backend}' is not implemented yet."),
             };
 
@@ -43,7 +43,7 @@ namespace BitNetSharp.Nodes
 
         public bool EnableCache { get; }
 
-        public global::BitNetSharp.Nodes.InferenceConfig InferenceConfig { get; }
+        public Nodes.InferenceConfig InferenceConfig { get; }
 
         public void Init()
         {
@@ -55,9 +55,9 @@ namespace BitNetSharp.Nodes
             isInitialized = true;
         }
 
-        private static global::BitNetSharp.Nodes.InferenceConfig CreateDefaultInferenceConfig()
+        private static Nodes.InferenceConfig CreateDefaultInferenceConfig()
         {
-            return new global::BitNetSharp.Nodes.InferenceConfig(global::BitNetSharp.Nodes.InferenceBackend.SIMD, global::BitNetSharp.Nodes.InferenceConfig.AutoThreadCount);
+            return new Nodes.InferenceConfig(Nodes.InferenceBackend.SIMD, Nodes.InferenceConfig.AutoThreadCount);
         }
 
         /// <summary>

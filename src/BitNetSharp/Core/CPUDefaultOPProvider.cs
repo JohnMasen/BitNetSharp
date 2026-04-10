@@ -6,9 +6,9 @@ namespace BitNetSharp.Core
     /// <summary>
     /// Provides the standard CPU implementation of math operations.
     /// </summary>
-    public sealed class CPUDefaultOPProvider : IOPProvider2
+    public sealed class CPUDefaultOPProvider : IOPProvider
     {
-        public CPUDefaultOPProvider(int threadCount = global::BitNetSharp.Nodes.InferenceConfig.AutoThreadCount)
+        public CPUDefaultOPProvider(int threadCount = Nodes.InferenceConfig.AutoThreadCount)
         {
             if (threadCount < 0)
             {
@@ -18,9 +18,14 @@ namespace BitNetSharp.Core
             ThreadCount = threadCount;
         }
 
-        public global::BitNetSharp.Nodes.InferenceBackend Backend => global::BitNetSharp.Nodes.InferenceBackend.CPU;
+        public string Backend => Nodes.InferenceBackendExtensions.ToBackendName(Nodes.InferenceBackend.CPU);
 
         public int ThreadCount { get; }
+
+        public (float ActivationScale, int ActivationSum) QuantizeBitNetActivations(ReadOnlyMemory<float> input, Memory<sbyte> quantizedValues)
+        {
+            return QuantizeBitNetActivations(input, quantizedValues, ThreadCount);
+        }
 
         public void Add(ReadOnlyMemory<float> input, ReadOnlyMemory<float> addend, Memory<float> output)
         {
@@ -74,7 +79,7 @@ namespace BitNetSharp.Core
                     packedRowByteCount,
                     activationScale,
                     weightScale,
-                    output.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount);
+                    output.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount, packedRowByteCount);
         }
 
         public void ForwardSoftmax(ReadOnlySpan<float> input, Span<float> output)
@@ -111,7 +116,7 @@ namespace BitNetSharp.Core
                         input.Span.Slice(startIndex, endIndex - startIndex),
                         normWeights.Span.Slice(startIndex, endIndex - startIndex),
                         inverseRootMeanSquare,
-                        output.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount);
+                        output.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount, sizeof(float));
                 return;
             }
 
@@ -136,7 +141,8 @@ namespace BitNetSharp.Core
                     MemoryMarshal.Cast<byte, Half>(embeddingWeights.Span.Slice(startIndex * rowLength * sizeof(ushort), (endIndex - startIndex) * rowLength * sizeof(ushort))),
                     rowLength,
                     output.Span.Slice(startIndex, endIndex - startIndex)),
-                ThreadCount);
+                ThreadCount,
+                checked(rowLength * sizeof(ushort)));
         }
 
         private void ExecuteForwardSoftmaxMemory(ReadOnlyMemory<float> input, Memory<float> output)
@@ -262,7 +268,14 @@ namespace BitNetSharp.Core
                 return ComputeRmsNormInverseRootMeanSquareSingleThread(input.Span, epsilon);
             }
 
-            ThreadHelper.WorkRange[] ranges = ThreadHelper.CreateRanges(input.Length, threadCount, sizeof(float));
+            ThreadHelper.WorkRange[] workRanges = ThreadHelper.CreateRanges(input.Length, threadCount, sizeof(float));
+            (int StartIndex, int EndIndex)[] ranges = new (int StartIndex, int EndIndex)[workRanges.Length];
+            for (int rangeIndex = 0; rangeIndex < workRanges.Length; rangeIndex++)
+            {
+                ThreadHelper.WorkRange range = workRanges[rangeIndex];
+                ranges[rangeIndex] = (range.StartIndex, range.EndIndex);
+            }
+
             if (ranges.Length <= 1)
             {
                 return ComputeRmsNormInverseRootMeanSquareSingleThread(input.Span, epsilon);
@@ -271,8 +284,8 @@ namespace BitNetSharp.Core
             double[] partialSums = new double[ranges.Length];
             Parallel.For(0, ranges.Length, new ParallelOptions { MaxDegreeOfParallelism = ranges.Length }, rangeIndex =>
             {
-                ThreadHelper.WorkRange range = ranges[rangeIndex];
-                partialSums[rangeIndex] = AccumulateRmsNormSumSquares(input.Span.Slice(range.StartIndex, range.EndIndex - range.StartIndex));
+                (int startIndex, int endIndex) = ranges[rangeIndex];
+                partialSums[rangeIndex] = AccumulateRmsNormSumSquares(input.Span.Slice(startIndex, endIndex - startIndex));
             });
 
             double sumSquares = 0d;

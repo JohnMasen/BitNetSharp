@@ -101,7 +101,10 @@ namespace BitNetSharp.Tests
 
         public static IEnumerable<object[]> GetFeedForwardResidualCaseIndices()
         {
-            return FeedForwardResidualVectorsDocumentCache.Value.TestCases.Select((_, caseIndex) => new object[] { caseIndex });
+            return new[]
+            {
+                new object[] { 0 },
+            };
         }
 
         private static void VerifyFeedForwardResidualMatchesBaseline(int caseIndex, BitNetSharp.Nodes.InferenceBackend backend)

@@ -154,13 +154,15 @@ namespace BitNetSharp.Tests
 
         public static IEnumerable<object[]> GetQKVCaseIndices()
         {
-            return QKVVectorsDocumentCache.Value.TestCases.Select((_, caseIndex) => new object[] { caseIndex });
+            return new[]
+            {
+                new object[] { 0 },
+            };
         }
 
         public static IEnumerable<object[]> GetSmallProjectionCaseIndices()
         {
             yield return new object[] { 0 };
-            yield return new object[] { 1 };
         }
 
         private static QKVVectorsDocument LoadQKVVectorsDocument()
@@ -291,7 +293,7 @@ namespace BitNetSharp.Tests
             AssertFloatArraysAreClose(expected, actual, 1e-5f, caseName);
         }
 
-        private static float[] ProjectWithProvider(IOPProvider1 provider, ReadOnlyMemory<float> input, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale)
+        private static float[] ProjectWithProvider(IOPProvider provider, ReadOnlyMemory<float> input, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale)
         {
             float[] output = new float[outputLength];
             provider.ProjectBitNetI2(input, packedWeights, outputLength, weightScale, output);

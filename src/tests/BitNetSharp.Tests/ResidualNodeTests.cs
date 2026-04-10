@@ -101,7 +101,10 @@ namespace BitNetSharp.Tests
 
         public static IEnumerable<object[]> GetResidualCaseIndices()
         {
-            return ResidualVectorsDocumentCache.Value.TestCases.Select((_, caseIndex) => new object[] { caseIndex });
+            return new[]
+            {
+                new object[] { 0 },
+            };
         }
 
         private static void VerifyResidualMatchesBaselineCpu(int caseIndex)

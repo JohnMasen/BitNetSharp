@@ -10,10 +10,10 @@ namespace BitNetSharp.Nodes
     public sealed class FeedForwardResidualNode
     {
         private readonly BitNetModel model;
-        private readonly IOPProvider2 opProvider;
+        private readonly IOPProvider opProvider;
         private bool isInitialized;
 
-        public FeedForwardResidualNode(BitNetModel model, global::BitNetSharp.Nodes.InferenceConfig? inferenceConfig = null)
+        public FeedForwardResidualNode(BitNetModel model, Nodes.InferenceConfig? inferenceConfig = null)
         {
             ArgumentNullException.ThrowIfNull(model);
 
@@ -26,23 +26,23 @@ namespace BitNetSharp.Nodes
             InferenceConfig = inferenceConfig ?? CreateDefaultInferenceConfig();
             opProvider = InferenceConfig.Backend switch
             {
-                global::BitNetSharp.Nodes.InferenceBackend.CPU => new CPUDefaultOPProvider(InferenceConfig.ThreadCount),
-                global::BitNetSharp.Nodes.InferenceBackend.Tensor => new CPUTensorOPProvider(InferenceConfig.ThreadCount),
-                global::BitNetSharp.Nodes.InferenceBackend.SIMD => new CPUSimdOPProvider(InferenceConfig.ThreadCount),
+                Nodes.InferenceBackend.CPU => new CPUDefaultOPProvider(InferenceConfig.ThreadCount),
+                Nodes.InferenceBackend.Tensor => new CPUTensorOPProvider(InferenceConfig.ThreadCount),
+                Nodes.InferenceBackend.SIMD => new CPUSimdOPProvider(InferenceConfig.ThreadCount),
                 _ => throw new NotSupportedException($"Backend '{InferenceConfig.Backend}' is not implemented yet."),
             };
         }
 
-        public global::BitNetSharp.Nodes.InferenceConfig InferenceConfig { get; }
+        public Nodes.InferenceConfig InferenceConfig { get; }
 
         public void Init()
         {
             isInitialized = true;
         }
 
-        private static global::BitNetSharp.Nodes.InferenceConfig CreateDefaultInferenceConfig()
+        private static Nodes.InferenceConfig CreateDefaultInferenceConfig()
         {
-            return new global::BitNetSharp.Nodes.InferenceConfig(global::BitNetSharp.Nodes.InferenceBackend.CPU, 1);
+            return new Nodes.InferenceConfig(Nodes.InferenceBackend.CPU, 1);
         }
 
         /// <summary>

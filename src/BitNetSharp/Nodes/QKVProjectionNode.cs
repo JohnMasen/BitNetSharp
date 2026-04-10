@@ -15,7 +15,7 @@ namespace BitNetSharp.Nodes
         private readonly BitNetTensorInfo queryTensor;
         private readonly BitNetTensorInfo keyTensor;
         private readonly BitNetTensorInfo valueTensor;
-        private readonly IOPProvider2 opProvider;
+        private readonly IOPProvider opProvider;
         private PackedProjectionWeights? cachedQueryWeights;
         private PackedProjectionWeights? cachedKeyWeights;
         private PackedProjectionWeights? cachedValueWeights;
@@ -27,7 +27,7 @@ namespace BitNetSharp.Nodes
             BitNetTensorInfo keyTensor,
             BitNetTensorInfo valueTensor,
             bool enableCache = false,
-            global::BitNetSharp.Nodes.InferenceConfig? inferenceConfig = null)
+            Nodes.InferenceConfig? inferenceConfig = null)
         {
             ArgumentNullException.ThrowIfNull(model);
             ArgumentNullException.ThrowIfNull(queryTensor);
@@ -47,9 +47,9 @@ namespace BitNetSharp.Nodes
             InferenceConfig = inferenceConfig ?? CreateDefaultInferenceConfig();
             opProvider = InferenceConfig.Backend switch
             {
-                global::BitNetSharp.Nodes.InferenceBackend.CPU => new CPUDefaultOPProvider(InferenceConfig.ThreadCount),
-                global::BitNetSharp.Nodes.InferenceBackend.Tensor => new CPUTensorOPProvider(InferenceConfig.ThreadCount),
-                global::BitNetSharp.Nodes.InferenceBackend.SIMD => new CPUSimdOPProvider(InferenceConfig.ThreadCount),
+                Nodes.InferenceBackend.CPU => new CPUDefaultOPProvider(InferenceConfig.ThreadCount),
+                Nodes.InferenceBackend.Tensor => new CPUTensorOPProvider(InferenceConfig.ThreadCount),
+                Nodes.InferenceBackend.SIMD => new CPUSimdOPProvider(InferenceConfig.ThreadCount),
                 _ => throw new NotSupportedException($"Backend '{InferenceConfig.Backend}' is not implemented yet."),
             };
 
@@ -62,7 +62,7 @@ namespace BitNetSharp.Nodes
 
         public bool EnableCache { get; }
 
-        public global::BitNetSharp.Nodes.InferenceConfig InferenceConfig { get; }
+        public Nodes.InferenceConfig InferenceConfig { get; }
 
         public void Init()
         {
@@ -76,9 +76,9 @@ namespace BitNetSharp.Nodes
             isInitialized = true;
         }
 
-        private static global::BitNetSharp.Nodes.InferenceConfig CreateDefaultInferenceConfig()
+        private static Nodes.InferenceConfig CreateDefaultInferenceConfig()
         {
-            return new global::BitNetSharp.Nodes.InferenceConfig(global::BitNetSharp.Nodes.InferenceBackend.SIMD, global::BitNetSharp.Nodes.InferenceConfig.AutoThreadCount);
+            return new Nodes.InferenceConfig(Nodes.InferenceBackend.SIMD, Nodes.InferenceConfig.AutoThreadCount);
         }
 
         /// <summary>
@@ -122,7 +122,12 @@ namespace BitNetSharp.Nodes
                 PackedProjectionWeights cachedQueryWeights = EnsureCachedQueryWeights();
                 PackedProjectionWeights cachedKeyWeights = EnsureCachedKeyWeights();
                 PackedProjectionWeights cachedValueWeights = EnsureCachedValueWeights();
-                opProvider.ForwardQKVProjection(input, cachedQueryWeights.PackedWeights, cachedQueryWeights.Scale, cachedKeyWeights.PackedWeights, cachedKeyWeights.Scale, cachedValueWeights.PackedWeights, cachedValueWeights.Scale, queryOutputLength, keyValueOutputLength, query, key, value);
+                using IMemoryOwner<sbyte> quantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(input.Length);
+                Memory<sbyte> quantizedValues = quantizedValuesOwner.Memory[..input.Length];
+                (float activationScale, _) = opProvider.QuantizeBitNetActivations(input, quantizedValues);
+                opProvider.ProjectBitNetI2(quantizedValues, activationScale, cachedQueryWeights.PackedWeights, queryOutputLength, cachedQueryWeights.Scale, query);
+                opProvider.ProjectBitNetI2(quantizedValues, activationScale, cachedKeyWeights.PackedWeights, keyValueOutputLength, cachedKeyWeights.Scale, key);
+                opProvider.ProjectBitNetI2(quantizedValues, activationScale, cachedValueWeights.PackedWeights, keyValueOutputLength, cachedValueWeights.Scale, value);
                 return;
             }
 
@@ -133,7 +138,12 @@ namespace BitNetSharp.Nodes
             PackedProjectionWeights keyWeights = ParsePackedWeights(keyTensorData.Memory, keyTensor, "QKV key");
             PackedProjectionWeights valueWeights = ParsePackedWeights(valueTensorData.Memory, valueTensor, "QKV value");
 
-            opProvider.ForwardQKVProjection(input, queryWeights.PackedWeights, queryWeights.Scale, keyWeights.PackedWeights, keyWeights.Scale, valueWeights.PackedWeights, valueWeights.Scale, queryOutputLength, keyValueOutputLength, query, key, value);
+            using IMemoryOwner<sbyte> uncachedQuantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(input.Length);
+            Memory<sbyte> uncachedQuantizedValues = uncachedQuantizedValuesOwner.Memory[..input.Length];
+            (float uncachedActivationScale, _) = opProvider.QuantizeBitNetActivations(input, uncachedQuantizedValues);
+            opProvider.ProjectBitNetI2(uncachedQuantizedValues, uncachedActivationScale, queryWeights.PackedWeights, queryOutputLength, queryWeights.Scale, query);
+            opProvider.ProjectBitNetI2(uncachedQuantizedValues, uncachedActivationScale, keyWeights.PackedWeights, keyValueOutputLength, keyWeights.Scale, key);
+            opProvider.ProjectBitNetI2(uncachedQuantizedValues, uncachedActivationScale, valueWeights.PackedWeights, keyValueOutputLength, valueWeights.Scale, value);
         }
 
         private PackedProjectionWeights ReadPackedWeights(BitNetTensorInfo tensor)

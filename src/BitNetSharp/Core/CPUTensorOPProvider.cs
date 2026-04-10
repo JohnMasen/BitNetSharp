@@ -7,9 +7,9 @@ namespace BitNetSharp.Core
     /// <summary>
     /// Provides the tensor-accelerated CPU implementation of math operations.
     /// </summary>
-    public sealed class CPUTensorOPProvider : IOPProvider2
+    public sealed class CPUTensorOPProvider : IOPProvider
     {
-        public CPUTensorOPProvider(int threadCount = global::BitNetSharp.Nodes.InferenceConfig.AutoThreadCount)
+        public CPUTensorOPProvider(int threadCount = Nodes.InferenceConfig.AutoThreadCount)
         {
             if (threadCount < 0)
             {
@@ -19,9 +19,14 @@ namespace BitNetSharp.Core
             ThreadCount = threadCount;
         }
 
-        public global::BitNetSharp.Nodes.InferenceBackend Backend => global::BitNetSharp.Nodes.InferenceBackend.Tensor;
+        public string Backend => Nodes.InferenceBackendExtensions.ToBackendName(Nodes.InferenceBackend.Tensor);
 
         public int ThreadCount { get; }
+
+        public (float ActivationScale, int ActivationSum) QuantizeBitNetActivations(ReadOnlyMemory<float> input, Memory<sbyte> quantizedValues)
+        {
+            return QuantizeBitNetActivations(input, quantizedValues, ThreadCount);
+        }
 
         public void Add(ReadOnlyMemory<float> input, ReadOnlyMemory<float> addend, Memory<float> output)
         {
@@ -40,7 +45,7 @@ namespace BitNetSharp.Core
                 FillAddRange(
                     input.Span.Slice(startIndex, endIndex - startIndex),
                     addend.Span.Slice(startIndex, endIndex - startIndex),
-                    output.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount);
+                    output.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount, sizeof(float));
         }
 
         public void ProjectBitNetI2(ReadOnlyMemory<float> input, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale, Memory<float> output)
@@ -89,7 +94,7 @@ namespace BitNetSharp.Core
                     packedRowByteCount,
                     activationScale,
                     weightScale,
-                    output.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount);
+                    output.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount, packedRowByteCount);
         }
 
         public void ForwardSoftmax(ReadOnlySpan<float> input, Span<float> output)
@@ -130,7 +135,7 @@ namespace BitNetSharp.Core
                     input.Span.Slice(startIndex, endIndex - startIndex),
                     normWeights.Span.Slice(startIndex, endIndex - startIndex),
                     inverseRootMeanSquare,
-                    output.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount);
+                    output.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount, sizeof(float));
         }
 
         public void ForwardLmHead(ReadOnlyMemory<float> input, ReadOnlyMemory<byte> embeddingWeights, int rowLength, int vocabularySize, Memory<float> output)
@@ -157,7 +162,8 @@ namespace BitNetSharp.Core
                         output.Span.Slice(startIndex, endIndex - startIndex),
                         rowOwner.Memory.Span[..rowLength]);
                 },
-                ThreadCount);
+                ThreadCount,
+                checked(rowLength * sizeof(ushort)));
         }
 
         private void ExecuteForwardSoftmaxMemory(ReadOnlyMemory<float> input, Memory<float> output)
@@ -221,7 +227,7 @@ namespace BitNetSharp.Core
             {
                 Span<float> outputRange = output.Span.Slice(startIndex, endIndex - startIndex);
                 TensorPrimitives.Multiply(outputRange, inverseSum, outputRange);
-            }, ThreadCount);
+            }, ThreadCount, sizeof(float));
         }
 
         private static void ForwardSoftmaxCore(ReadOnlySpan<float> input, Span<float> output)

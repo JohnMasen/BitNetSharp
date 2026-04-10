@@ -51,3 +51,5 @@
 - 已为 `BitNetRuntime` 添加临时 `Inference(int tokenId)` 入口，用于验证当前单 token 完整链路：`Embedding -> per-layer(attn norm / QKV / Attention / Residual / FFN norm / FFN / FFN residual) -> FinalNorm -> LmHead -> Sampling -> Decode`；该方法及其测试后续将随 runtime 正式架构演进一并删除
 - 多余的 `global::BitNetSharp.` 资格限定已继续清理；当前剩余测试代码已改为优先使用普通命名空间引用，仅在未来确有命名冲突时才保留 `global::`
 - 临时 `BitNetRuntime.Inference` 测试已补上对 `layer_vectors_pure.json` 中 `next_token_id` 的直接断言，当前既验证 runtime 编排链路一致性，也验证最终 decode 输出与 baseline 数据一致
+- `OPProviderBackendTests` 中针对 `IOPProvider2` 默认编排的临时测试已移除；当前 OP 相关测试聚焦具体 provider 的 `IOPProvider1` 行为与实际 node 路径
+- 默认开发节奏下，所有多 case 的数据驱动测试当前均只枚举第一个 case，以缩短回归时间；保留原有按 caseId 取数逻辑，后续需要扩大覆盖时可直接恢复 provider 枚举

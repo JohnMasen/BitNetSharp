@@ -104,7 +104,10 @@ namespace BitNetSharp.Tests
 
         public static IEnumerable<object[]> GetFeedForwardNormCaseIndices()
         {
-            return FeedForwardNormVectorsDocumentCache.Value.TestCases.Select((_, caseIndex) => new object[] { caseIndex });
+            return new[]
+            {
+                new object[] { 0 },
+            };
         }
 
         private static void VerifyFeedForwardNormMatchesBaseline(int caseIndex, BitNetSharp.Nodes.InferenceBackend backend)

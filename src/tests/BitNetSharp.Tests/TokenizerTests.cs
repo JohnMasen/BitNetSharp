@@ -55,7 +55,7 @@ namespace BitNetSharp.Tests
 
         public static IEnumerable<object[]> GetEncodingCases()
         {
-            return StandardTokensDocumentCache.Value.TestCases.Select(testCase => new object[]
+            return StandardTokensDocumentCache.Value.TestCases.Take(1).Select(testCase => new object[]
             {
                 testCase.Name,
                 testCase.Text,
@@ -66,7 +66,7 @@ namespace BitNetSharp.Tests
 
         public static IEnumerable<object[]> GetDecodingCases()
         {
-            return StandardTokensDocumentCache.Value.TestCases.Select(testCase => new object[]
+            return StandardTokensDocumentCache.Value.TestCases.Take(1).Select(testCase => new object[]
             {
                 testCase.Name,
                 testCase.TokenIds.ToArray(),

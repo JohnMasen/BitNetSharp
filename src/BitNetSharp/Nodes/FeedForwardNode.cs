@@ -17,7 +17,7 @@ namespace BitNetSharp.Nodes
         private readonly BitNetTensorInfo gateTensor;
         private readonly BitNetTensorInfo upTensor;
         private readonly BitNetTensorInfo downTensor;
-        private readonly IOPProvider2 opProvider;
+        private readonly IOPProvider opProvider;
         private float[]? cachedSubNormWeights;
         private PackedProjectionWeights? cachedGateWeights;
         private PackedProjectionWeights? cachedUpWeights;
@@ -34,7 +34,7 @@ namespace BitNetSharp.Nodes
             BitNetTensorInfo upTensor,
             BitNetTensorInfo downTensor,
             bool enableCache = false,
-            global::BitNetSharp.Nodes.InferenceConfig? inferenceConfig = null)
+            Nodes.InferenceConfig? inferenceConfig = null)
         {
             ArgumentNullException.ThrowIfNull(model);
             ArgumentNullException.ThrowIfNull(subNormTensor);
@@ -56,9 +56,9 @@ namespace BitNetSharp.Nodes
             InferenceConfig = inferenceConfig ?? CreateDefaultInferenceConfig();
             opProvider = InferenceConfig.Backend switch
             {
-                global::BitNetSharp.Nodes.InferenceBackend.CPU => new CPUDefaultOPProvider(InferenceConfig.ThreadCount),
-                global::BitNetSharp.Nodes.InferenceBackend.Tensor => new CPUTensorOPProvider(InferenceConfig.ThreadCount),
-                global::BitNetSharp.Nodes.InferenceBackend.SIMD => new CPUSimdOPProvider(InferenceConfig.ThreadCount),
+                Nodes.InferenceBackend.CPU => new CPUDefaultOPProvider(InferenceConfig.ThreadCount),
+                Nodes.InferenceBackend.Tensor => new CPUTensorOPProvider(InferenceConfig.ThreadCount),
+                Nodes.InferenceBackend.SIMD => new CPUSimdOPProvider(InferenceConfig.ThreadCount),
                 _ => throw new NotSupportedException($"Backend '{InferenceConfig.Backend}' is not implemented yet."),
             };
 
@@ -70,7 +70,7 @@ namespace BitNetSharp.Nodes
 
         public bool EnableCache { get; }
 
-        public global::BitNetSharp.Nodes.InferenceConfig InferenceConfig { get; }
+        public Nodes.InferenceConfig InferenceConfig { get; }
 
         public void Init()
         {
@@ -85,9 +85,9 @@ namespace BitNetSharp.Nodes
             isInitialized = true;
         }
 
-        private static global::BitNetSharp.Nodes.InferenceConfig CreateDefaultInferenceConfig()
+        private static Nodes.InferenceConfig CreateDefaultInferenceConfig()
         {
-            return new global::BitNetSharp.Nodes.InferenceConfig(global::BitNetSharp.Nodes.InferenceBackend.SIMD, global::BitNetSharp.Nodes.InferenceConfig.AutoThreadCount);
+            return new Nodes.InferenceConfig(Nodes.InferenceBackend.SIMD, Nodes.InferenceConfig.AutoThreadCount);
         }
 
         /// <summary>
@@ -138,7 +138,7 @@ namespace BitNetSharp.Nodes
                 PackedProjectionWeights cachedGateWeights = EnsureCachedGateWeights();
                 PackedProjectionWeights cachedUpWeights = EnsureCachedUpWeights();
                 PackedProjectionWeights cachedDownWeights = EnsureCachedDownWeights();
-                opProvider.ForwardFeedForward(input, EnsureCachedSubNormWeights().AsMemory(0, feedForwardLength), model.Config!.AttentionLayerNormRmsEpsilon, cachedGateWeights.PackedWeights, cachedGateWeights.Scale, cachedUpWeights.PackedWeights, cachedUpWeights.Scale, cachedDownWeights.PackedWeights, cachedDownWeights.Scale, embeddingLength, feedForwardLength, subNorm, output);
+                ExecuteFeedForward(input, EnsureCachedSubNormWeights(), cachedGateWeights, cachedUpWeights, cachedDownWeights, embeddingLength, feedForwardLength, subNorm, output);
                 return;
             }
 
@@ -157,7 +157,33 @@ namespace BitNetSharp.Nodes
             using IMemoryOwner<byte> downTensorData = model.ReadTensorData(downTensor);
             PackedProjectionWeights downWeights = ParsePackedWeights(downTensorData.Memory, downTensor, "Feed-forward down");
 
-            opProvider.ForwardFeedForward(input, subNormWeights, model.Config!.AttentionLayerNormRmsEpsilon, gateWeights.PackedWeights, gateWeights.Scale, upWeights.PackedWeights, upWeights.Scale, downWeights.PackedWeights, downWeights.Scale, embeddingLength, feedForwardLength, subNorm, output);
+            ExecuteFeedForward(input, subNormWeights, gateWeights, upWeights, downWeights, embeddingLength, feedForwardLength, subNorm, output);
+        }
+
+        private void ExecuteFeedForward(ReadOnlyMemory<float> input, ReadOnlyMemory<float> subNormWeights, PackedProjectionWeights gateWeights, PackedProjectionWeights upWeights, PackedProjectionWeights downWeights, int embeddingLength, int feedForwardLength, Memory<float> subNormOutput, Memory<float> output)
+        {
+            using IMemoryOwner<float> upOwner = MemoryPool<float>.Shared.Rent(feedForwardLength);
+            using IMemoryOwner<float> gateOwner = MemoryPool<float>.Shared.Rent(feedForwardLength);
+            using IMemoryOwner<sbyte> quantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(input.Length);
+            Memory<float> up = upOwner.Memory[..feedForwardLength];
+            Memory<float> gate = gateOwner.Memory[..feedForwardLength];
+            Memory<sbyte> quantizedValues = quantizedValuesOwner.Memory[..input.Length];
+            (float activationScale, _) = opProvider.QuantizeBitNetActivations(input, quantizedValues);
+
+            opProvider.ProjectBitNetI2(quantizedValues, activationScale, upWeights.PackedWeights, feedForwardLength, upWeights.Scale, up);
+            opProvider.ProjectBitNetI2(quantizedValues, activationScale, gateWeights.PackedWeights, feedForwardLength, gateWeights.Scale, gate);
+            ApplySquaredReluGate(gate.Span, up.Span);
+            opProvider.ForwardRmsNorm(up, subNormWeights[..feedForwardLength], model.Config!.AttentionLayerNormRmsEpsilon, subNormOutput);
+            opProvider.ProjectBitNetI2(subNormOutput, downWeights.PackedWeights, embeddingLength, downWeights.Scale, output);
+        }
+
+        private static void ApplySquaredReluGate(ReadOnlySpan<float> gate, Span<float> up)
+        {
+            for (int index = 0; index < up.Length; index++)
+            {
+                float relu = MathF.Max(gate[index], 0f);
+                up[index] *= relu * relu;
+            }
         }
 
         private void ValidateSubNormTensor()
