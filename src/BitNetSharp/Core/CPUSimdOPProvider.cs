@@ -32,16 +32,16 @@ namespace BitNetSharp.Core
         public (float ActivationScale, int ActivationSum) QuantizeBitNetActivations(RuntimeTensor input, RuntimeTensor quantizedValues)
         {
             return QuantizeBitNetActivations(
-                RuntimeTensorBufferHelper.GetReadOnlyMemory<float>(input, nameof(input)),
-                RuntimeTensorBufferHelper.GetMemory<sbyte>(quantizedValues, nameof(quantizedValues)),
+                input.GetReadOnlyMemory<float>(),
+                quantizedValues.GetMemory<sbyte>(),
                 ThreadCount);
         }
 
         public void Add(RuntimeTensor input, RuntimeTensor addend, RuntimeTensor output)
         {
-            ReadOnlyMemory<float> inputMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<float>(input, nameof(input));
-            ReadOnlyMemory<float> addendMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<float>(addend, nameof(addend));
-            Memory<float> outputMemory = RuntimeTensorBufferHelper.GetMemory<float>(output, nameof(output));
+            ReadOnlyMemory<float> inputMemory = input.GetReadOnlyMemory<float>();
+            ReadOnlyMemory<float> addendMemory = addend.GetReadOnlyMemory<float>();
+            Memory<float> outputMemory = output.GetMemory<float>();
             ReadOnlySpan<float> inputSpan = inputMemory.Span;
             ReadOnlySpan<float> addendSpan = addendMemory.Span;
             Span<float> outputSpan = outputMemory.Span;
@@ -63,9 +63,9 @@ namespace BitNetSharp.Core
 
         public void ProjectBitNetI2(RuntimeTensor input, RuntimeTensor packedWeights, int outputLength, float weightScale, RuntimeTensor output)
         {
-            ReadOnlyMemory<float> inputMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<float>(input, nameof(input));
-            ReadOnlyMemory<byte> packedWeightsMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<byte>(packedWeights, nameof(packedWeights));
-            Memory<float> outputMemory = RuntimeTensorBufferHelper.GetMemory<float>(output, nameof(output));
+            ReadOnlyMemory<float> inputMemory = input.GetReadOnlyMemory<float>();
+            ReadOnlyMemory<byte> packedWeightsMemory = packedWeights.GetReadOnlyMemory<byte>();
+            Memory<float> outputMemory = output.GetMemory<float>();
             ValidationHelper.ValidateBitNetProjectionArguments(inputMemory.Span, packedWeightsMemory.Span, outputLength);
             EnsureBitNetProjectionSupported();
             ValidationHelper.ValidateProjectionDestination(outputLength, outputMemory.Span);
@@ -79,9 +79,9 @@ namespace BitNetSharp.Core
 
         public void ProjectBitNetI2(RuntimeTensor quantizedValues, float activationScale, RuntimeTensor packedWeights, int outputLength, float weightScale, RuntimeTensor output)
         {
-            ReadOnlyMemory<sbyte> quantizedValuesMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<sbyte>(quantizedValues, nameof(quantizedValues));
-            ReadOnlyMemory<byte> packedWeightsMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<byte>(packedWeights, nameof(packedWeights));
-            Memory<float> outputMemory = RuntimeTensorBufferHelper.GetMemory<float>(output, nameof(output));
+            ReadOnlyMemory<sbyte> quantizedValuesMemory = quantizedValues.GetReadOnlyMemory<sbyte>();
+            ReadOnlyMemory<byte> packedWeightsMemory = packedWeights.GetReadOnlyMemory<byte>();
+            Memory<float> outputMemory = output.GetMemory<float>();
             ValidationHelper.ValidateBitNetProjectionArguments(quantizedValuesMemory.Span, packedWeightsMemory.Span, outputLength);
             EnsureBitNetProjectionSupported();
             Span<float> outputSpan = outputMemory.Span;
@@ -108,8 +108,8 @@ namespace BitNetSharp.Core
 
         public void ForwardSoftmax(RuntimeTensor input, RuntimeTensor output)
         {
-            ReadOnlyMemory<float> inputMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<float>(input, nameof(input));
-            Memory<float> outputMemory = RuntimeTensorBufferHelper.GetMemory<float>(output, nameof(output));
+            ReadOnlyMemory<float> inputMemory = input.GetReadOnlyMemory<float>();
+            Memory<float> outputMemory = output.GetMemory<float>();
             ReadOnlySpan<float> inputSpan = inputMemory.Span;
             Span<float> outputSpan = outputMemory.Span;
             ValidationHelper.ValidateSoftmaxDestination(inputSpan, outputSpan);
@@ -126,9 +126,9 @@ namespace BitNetSharp.Core
 
         public void ForwardRmsNorm(RuntimeTensor input, RuntimeTensor normWeights, float epsilon, RuntimeTensor output)
         {
-            ReadOnlyMemory<float> inputMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<float>(input, nameof(input));
-            ReadOnlyMemory<float> normWeightsMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<float>(normWeights, nameof(normWeights));
-            Memory<float> outputMemory = RuntimeTensorBufferHelper.GetMemory<float>(output, nameof(output));
+            ReadOnlyMemory<float> inputMemory = input.GetReadOnlyMemory<float>();
+            ReadOnlyMemory<float> normWeightsMemory = normWeights.GetReadOnlyMemory<float>();
+            Memory<float> outputMemory = output.GetMemory<float>();
             ReadOnlySpan<float> inputSpan = inputMemory.Span;
             ReadOnlySpan<float> normWeightsSpan = normWeightsMemory.Span;
             Span<float> outputSpan = outputMemory.Span;
@@ -151,9 +151,9 @@ namespace BitNetSharp.Core
 
         public void ForwardLmHead(RuntimeTensor input, RuntimeTensor embeddingWeights, int rowLength, int vocabularySize, RuntimeTensor output)
         {
-            ReadOnlyMemory<float> inputMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<float>(input, nameof(input));
-            ReadOnlyMemory<byte> embeddingWeightsMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<byte>(embeddingWeights, nameof(embeddingWeights));
-            Memory<float> outputMemory = RuntimeTensorBufferHelper.GetMemory<float>(output, nameof(output));
+            ReadOnlyMemory<float> inputMemory = input.GetReadOnlyMemory<float>();
+            ReadOnlyMemory<byte> embeddingWeightsMemory = embeddingWeights.GetReadOnlyMemory<byte>();
+            Memory<float> outputMemory = output.GetMemory<float>();
             ValidationHelper.ValidateLmHeadArguments(inputMemory, embeddingWeightsMemory, rowLength, vocabularySize, outputMemory);
             ReadOnlySpan<Half> embeddingWeightsSpan = MemoryMarshal.Cast<byte, Half>(embeddingWeightsMemory.Span);
 

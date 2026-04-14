@@ -51,6 +51,7 @@
 - For this repo's architecture discussions, prefer the latest consolidated design summary over intermediate discussion fragments; avoid relying on partial earlier memory snippets when reasoning about current runtime design.
 - For architecture discussion summaries, write them under the `doc/archdesign` path as markdown documents.
 - For this repo's runtime design, `RuntimeTensor` should support copying data in from `Memory<T>` for CPU-origin initialization. The user prefers `Session` to create tensors via its internal `MemoryManager`, while multiple sessions should share a single immutable weight copy instead of duplicating model weights per session.
+- Defer optimization work for the current RuntimeTensor/IOPProvider performance regression for now; revisit later with architecture simplification aimed at reducing lookup overhead such as extra list/dictionary access.
 
 ## QKV Parallel Work Instructions
 - For QKV parallel work, `ThreadHelper` should support optional block-aligned splitting. Default splitting should not enforce alignment; only SIMD callers should pass an alignment parameter based on the required data byte length.
@@ -88,3 +89,9 @@
 
 ## Communication Preferences
 - Follow-up communication for this repo discussion should be conducted in Chinese.
+
+## RuntimeTensor Access Instructions
+- Prefer `RuntimeTensor` buffer access via extension methods like `GetMemory` and `GetReadOnlyMemory` on a static extension class to simplify call sites.
+
+## Future Runtime Design Considerations
+- Consider an assembly approach that converts graph node calls into an action list so actions can access concrete memory objects directly; this is only a recorded direction for later research, not current implementation work.

@@ -142,7 +142,7 @@ namespace BitNetSharp.Nodes
         {
             using IMemoryOwner<float> upOwner = MemoryPool<float>.Shared.Rent(feedForwardLength);
             using IMemoryOwner<float> gateOwner = MemoryPool<float>.Shared.Rent(feedForwardLength);
-            ReadOnlyMemory<float> inputMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<float>(input, nameof(input));
+            ReadOnlyMemory<float> inputMemory = input.GetReadOnlyMemory<float>();
             using IMemoryOwner<sbyte> quantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(inputMemory.Length);
             Memory<float> up = upOwner.Memory[..feedForwardLength];
             Memory<float> gate = gateOwner.Memory[..feedForwardLength];

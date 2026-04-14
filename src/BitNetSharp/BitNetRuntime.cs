@@ -178,7 +178,7 @@ namespace BitNetSharp
             RuntimeTensor query = session.QKVQueryTensor;
             RuntimeTensor key = session.QKVKeyTensor;
             RuntimeTensor value = session.QKVValueTensor;
-            ReadOnlyMemory<float> inputMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<float>(input, nameof(input));
+            ReadOnlyMemory<float> inputMemory = input.GetReadOnlyMemory<float>();
             int queryOutputLength = checked((int)model.Config!.EmbeddingLength);
             int keyValueOutputLength = checked((int)model.Config.KeyValueProjectionSize);
 
@@ -226,7 +226,7 @@ namespace BitNetSharp
             RuntimeTensor subNormWeightsTensor = RuntimeTensor.CreateReadOnly<float>("RuntimeAttentionSubNormWeights", subNormWeights.AsMemory(0, attentionContext.Length), [attentionContext.Length]);
             opProvider.ForwardRmsNorm(attentionContextTensor, subNormWeightsTensor, model.Config.AttentionLayerNormRmsEpsilon, subNorm);
             opProvider.ProjectBitNetI2(subNorm, CreatePackedWeightTensor(outputWeights.PackedWeights, "RuntimeAttentionOutputWeights"), embeddingLength, outputWeights.Scale, output);
-            Memory<float> outputMemory = RuntimeTensorBufferHelper.GetMemory<float>(output, nameof(output));
+            Memory<float> outputMemory = output.GetMemory<float>();
             ApplyScale(outputMemory[..embeddingLength], outputScaleValues);
             ApplyBias(outputMemory[..embeddingLength], outputBiasValues);
         }
@@ -238,7 +238,7 @@ namespace BitNetSharp
         private void ExecuteFeedForward(int layerIndex, BitNetLayerDefinition layer)
         {
             RuntimeTensor input = session.FeedForwardNormTensor;
-            ReadOnlyMemory<float> inputMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<float>(input, nameof(input));
+            ReadOnlyMemory<float> inputMemory = input.GetReadOnlyMemory<float>();
             int embeddingLength = checked((int)model.Config!.EmbeddingLength);
             int feedForwardLength = checked((int)model.Config.FeedForwardLength);
             float[] subNormWeights = GetFloatTensor(cachedFeedForwardSubNormWeights, layerIndex, layer.FeedForwardSubNorm, "Feed-forward sub-norm");

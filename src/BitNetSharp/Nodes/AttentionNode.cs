@@ -180,7 +180,7 @@ namespace BitNetSharp.Nodes
             RuntimeTensor attentionContextTensor = RuntimeTensor.CreateWritable("AttentionContext", attentionContext, [embeddingLength]);
             opProvider.ForwardRmsNorm(attentionContextTensor, subNormWeights, model.Config.AttentionLayerNormRmsEpsilon, subNorm);
             opProvider.ProjectBitNetI2(subNorm, CreatePackedWeightTensor(outputWeights.PackedWeights, "AttentionOutputWeights"), embeddingLength, outputWeights.Scale, output);
-            Memory<float> outputMemory = RuntimeTensorBufferHelper.GetMemory<float>(output, nameof(output));
+            Memory<float> outputMemory = output.GetMemory<float>();
             ApplyScale(outputMemory[..embeddingLength], outputScaleValues);
             ApplyBias(outputMemory[..embeddingLength], outputBiasValues);
         }
