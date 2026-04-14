@@ -23,6 +23,8 @@
 |---|---|---|---|
 | `SamplingNode` / next-token 选择 | 已实现 | 是 | 已覆盖 greedy `argmax`、`top-k`、`next_token_id` baseline |
 | 单 token 端到端 runtime 编排 | 已实现（仅测试用途） | 是 | `BitNetRuntime` 已接起当前单 token 完整推理链路，但该入口仅用于链路验证，后续会连同测试一起删除 |
+| `RuntimeTensor` / Session 张量访问入口 | 已实现（第一版） | 是 | 已引入非泛型 `RuntimeTensor`，并新增 `GetWeightTensor(string)` 与 `GetOrCreateRuntimeTensor(string)`；权重 tensor 由 `BitNetModel` 共享缓存，runtime tensor 由 `BitNetSession` 私有创建 |
+| `IOPProvider` RuntimeTensor 迁移 | 已实现（第一版） | 是 | `IOPProvider` 的主要张量输入输出已从 `Memory<T>` / `Span<T>` 迁移到 `RuntimeTensor`；CPU / Tensor / SIMD provider、主要 node、以及运行时过渡编排路径已同步切换 |
 
 ## Summary
 
@@ -56,3 +58,5 @@
 - 与首 case 数据驱动测试重复的专用 `DebugCase` 基线测试入口已移除；当前调试默认直接复用只跑首 case 的数据驱动测试
 - `InferenceConfig` 中硬编码 `CPU` / `Tensor` / `SIMD` 三类 provider 的 `Create*` 工厂已移除；核心层不再通过这些静态入口假设固定 provider 集合，调用方侧改为显式构造并传入 `IOPProvider`
 - `OPProviderBackendNames` 也已从主代码移除；provider 自身直接声明 backend 字符串，测试侧固定标识改收敛到测试辅助，避免主代码继续暴露固定 provider 集合假设
+- 已引入第一版 `RuntimeTensor`：`BitNetSession` 可通过 `GetWeightTensor(string)` 获取模型级共享只读权重 tensor，并通过 `GetOrCreateRuntimeTensor(string)` 获取会话私有 runtime tensor；现有会话缓冲区属性已改为基于 `RuntimeTensor` 的统一创建与访问
+- `IOPProvider` 的主要张量边界也已迁移到 `RuntimeTensor`；`ForwardSoftmax` 也已从 `Span` 公开签名切到 `RuntimeTensor`。当前 provider 内部仍解析回 `Memory/Span` 以复用现有 CPU/Tensor/SIMD 实现，但 node/runtime/测试辅助层已不再直接把 `Memory<T>` 或 `Span<T>` 作为 OP API 传递对象

@@ -29,130 +29,147 @@ namespace BitNetSharp.Core
 
         public int ThreadCount { get; }
 
-        public (float ActivationScale, int ActivationSum) QuantizeBitNetActivations(ReadOnlyMemory<float> input, Memory<sbyte> quantizedValues)
+        public (float ActivationScale, int ActivationSum) QuantizeBitNetActivations(RuntimeTensor input, RuntimeTensor quantizedValues)
         {
-            return QuantizeBitNetActivations(input, quantizedValues, ThreadCount);
+            return QuantizeBitNetActivations(
+                RuntimeTensorBufferHelper.GetReadOnlyMemory<float>(input, nameof(input)),
+                RuntimeTensorBufferHelper.GetMemory<sbyte>(quantizedValues, nameof(quantizedValues)),
+                ThreadCount);
         }
 
-        public void Add(ReadOnlyMemory<float> input, ReadOnlyMemory<float> addend, Memory<float> output)
+        public void Add(RuntimeTensor input, RuntimeTensor addend, RuntimeTensor output)
         {
-            ReadOnlySpan<float> inputSpan = input.Span;
-            ReadOnlySpan<float> addendSpan = addend.Span;
-            Span<float> outputSpan = output.Span;
+            ReadOnlyMemory<float> inputMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<float>(input, nameof(input));
+            ReadOnlyMemory<float> addendMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<float>(addend, nameof(addend));
+            Memory<float> outputMemory = RuntimeTensorBufferHelper.GetMemory<float>(output, nameof(output));
+            ReadOnlySpan<float> inputSpan = inputMemory.Span;
+            ReadOnlySpan<float> addendSpan = addendMemory.Span;
+            Span<float> outputSpan = outputMemory.Span;
             ValidationHelper.ValidateAddDestination(inputSpan, addendSpan, outputSpan);
             EnsureAddSupported();
 
-            if (ThreadCount == 1 || input.Length <= Vector256<float>.Count)
+            if (ThreadCount == 1 || inputMemory.Length <= Vector256<float>.Count)
             {
                 FillAddRange(inputSpan, addendSpan, outputSpan);
                 return;
             }
 
-            ThreadHelper.ForEachRange(output.Length, (startIndex, endIndex) =>
+            ThreadHelper.ForEachRange(outputMemory.Length, (startIndex, endIndex) =>
                 FillAddRange(
-                    input.Span.Slice(startIndex, endIndex - startIndex),
-                    addend.Span.Slice(startIndex, endIndex - startIndex),
-                    output.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount, sizeof(float), Vector256<float>.Count * sizeof(float));
+                    inputMemory.Span.Slice(startIndex, endIndex - startIndex),
+                    addendMemory.Span.Slice(startIndex, endIndex - startIndex),
+                    outputMemory.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount, sizeof(float), Vector256<float>.Count * sizeof(float));
         }
 
-        public void ProjectBitNetI2(ReadOnlyMemory<float> input, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale, Memory<float> output)
+        public void ProjectBitNetI2(RuntimeTensor input, RuntimeTensor packedWeights, int outputLength, float weightScale, RuntimeTensor output)
         {
-            ValidationHelper.ValidateBitNetProjectionArguments(input.Span, packedWeights.Span, outputLength);
+            ReadOnlyMemory<float> inputMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<float>(input, nameof(input));
+            ReadOnlyMemory<byte> packedWeightsMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<byte>(packedWeights, nameof(packedWeights));
+            Memory<float> outputMemory = RuntimeTensorBufferHelper.GetMemory<float>(output, nameof(output));
+            ValidationHelper.ValidateBitNetProjectionArguments(inputMemory.Span, packedWeightsMemory.Span, outputLength);
             EnsureBitNetProjectionSupported();
-            ValidationHelper.ValidateProjectionDestination(outputLength, output.Span);
+            ValidationHelper.ValidateProjectionDestination(outputLength, outputMemory.Span);
 
-            using IMemoryOwner<sbyte> quantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(input.Length);
-            Memory<sbyte> quantizedValues = quantizedValuesOwner.Memory[..input.Length];
-            (float activationScale, _) = QuantizeBitNetActivations(input, quantizedValues, ThreadCount);
-            ProjectBitNetI2(quantizedValues, activationScale, packedWeights, outputLength, weightScale, output);
+            using IMemoryOwner<sbyte> quantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(inputMemory.Length);
+            Memory<sbyte> quantizedValues = quantizedValuesOwner.Memory[..inputMemory.Length];
+            RuntimeTensor quantizedTensor = RuntimeTensor.CreateWritable("QuantizedBitNetActivations", quantizedValues, [inputMemory.Length]);
+            (float activationScale, _) = QuantizeBitNetActivations(input, quantizedTensor);
+            ProjectBitNetI2(quantizedTensor, activationScale, packedWeights, outputLength, weightScale, output);
         }
 
-        public void ProjectBitNetI2(ReadOnlyMemory<sbyte> quantizedValues, float activationScale, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale, Memory<float> output)
+        public void ProjectBitNetI2(RuntimeTensor quantizedValues, float activationScale, RuntimeTensor packedWeights, int outputLength, float weightScale, RuntimeTensor output)
         {
-            ValidationHelper.ValidateBitNetProjectionArguments(quantizedValues.Span, packedWeights.Span, outputLength);
+            ReadOnlyMemory<sbyte> quantizedValuesMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<sbyte>(quantizedValues, nameof(quantizedValues));
+            ReadOnlyMemory<byte> packedWeightsMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<byte>(packedWeights, nameof(packedWeights));
+            Memory<float> outputMemory = RuntimeTensorBufferHelper.GetMemory<float>(output, nameof(output));
+            ValidationHelper.ValidateBitNetProjectionArguments(quantizedValuesMemory.Span, packedWeightsMemory.Span, outputLength);
             EnsureBitNetProjectionSupported();
-            Span<float> outputSpan = output.Span;
+            Span<float> outputSpan = outputMemory.Span;
             ValidationHelper.ValidateProjectionDestination(outputLength, outputSpan);
 
             const int PackedVectorWidth = 32;
             // Each packed byte stores four 2-bit weights, so one output row uses inputLength / 4 bytes.
-            int packedRowByteCount = checked(quantizedValues.Length / 4);
+            int packedRowByteCount = checked(quantizedValuesMemory.Length / 4);
             if (ThreadCount == 1 || outputLength <= 1)
             {
-                ProjectBitNetI2Range(quantizedValues.Span, packedWeights.Span, packedRowByteCount, activationScale, weightScale, outputSpan);
+                ProjectBitNetI2Range(quantizedValuesMemory.Span, packedWeightsMemory.Span, packedRowByteCount, activationScale, weightScale, outputSpan);
                 return;
             }
 
             ThreadHelper.ForEachRange(outputLength, (startIndex, endIndex) =>
                 ProjectBitNetI2Range(
-                    quantizedValues.Span,
-                    packedWeights.Span.Slice(startIndex * packedRowByteCount, (endIndex - startIndex) * packedRowByteCount),
+                    quantizedValuesMemory.Span,
+                    packedWeightsMemory.Span.Slice(startIndex * packedRowByteCount, (endIndex - startIndex) * packedRowByteCount),
                     packedRowByteCount,
                     activationScale,
                     weightScale,
-                    output.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount, packedRowByteCount, PackedVectorWidth);
+                    outputMemory.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount, packedRowByteCount, PackedVectorWidth);
         }
 
-        public void ForwardSoftmax(ReadOnlySpan<float> input, Span<float> output)
+        public void ForwardSoftmax(RuntimeTensor input, RuntimeTensor output)
         {
-            ValidationHelper.ValidateSoftmaxDestination(input, output);
+            ReadOnlyMemory<float> inputMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<float>(input, nameof(input));
+            Memory<float> outputMemory = RuntimeTensorBufferHelper.GetMemory<float>(output, nameof(output));
+            ReadOnlySpan<float> inputSpan = inputMemory.Span;
+            Span<float> outputSpan = outputMemory.Span;
+            ValidationHelper.ValidateSoftmaxDestination(inputSpan, outputSpan);
             EnsureSoftmaxSupported();
 
-            if (ThreadCount == 1 || input.Length <= 1)
+            if (ThreadCount == 1 || inputMemory.Length <= 1)
             {
-                ForwardSoftmaxCore(input, output);
+                ForwardSoftmaxCore(inputSpan, outputSpan);
                 return;
             }
 
-            using IMemoryOwner<float> inputOwner = MemoryPool<float>.Shared.Rent(input.Length);
-            using IMemoryOwner<float> outputOwner = MemoryPool<float>.Shared.Rent(input.Length);
-            Memory<float> inputMemory = inputOwner.Memory[..input.Length];
-            Memory<float> outputMemory = outputOwner.Memory[..input.Length];
-            input.CopyTo(inputMemory.Span);
             ExecuteForwardSoftmaxMemory(inputMemory, outputMemory);
-            outputMemory.Span.CopyTo(output);
         }
 
-        public void ForwardRmsNorm(ReadOnlyMemory<float> input, ReadOnlyMemory<float> normWeights, float epsilon, Memory<float> output)
+        public void ForwardRmsNorm(RuntimeTensor input, RuntimeTensor normWeights, float epsilon, RuntimeTensor output)
         {
-            ReadOnlySpan<float> inputSpan = input.Span;
-            ReadOnlySpan<float> normWeightsSpan = normWeights.Span;
-            Span<float> outputSpan = output.Span;
+            ReadOnlyMemory<float> inputMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<float>(input, nameof(input));
+            ReadOnlyMemory<float> normWeightsMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<float>(normWeights, nameof(normWeights));
+            Memory<float> outputMemory = RuntimeTensorBufferHelper.GetMemory<float>(output, nameof(output));
+            ReadOnlySpan<float> inputSpan = inputMemory.Span;
+            ReadOnlySpan<float> normWeightsSpan = normWeightsMemory.Span;
+            Span<float> outputSpan = outputMemory.Span;
             ValidationHelper.ValidateRmsNormDestination(inputSpan, normWeightsSpan, outputSpan);
 
-            float inverseRootMeanSquare = ComputeRmsNormInverseRootMeanSquare(input, epsilon, ThreadCount);
-            if (ThreadCount == 1 || input.Length <= Vector256<float>.Count)
+            float inverseRootMeanSquare = ComputeRmsNormInverseRootMeanSquare(inputMemory, epsilon, ThreadCount);
+            if (ThreadCount == 1 || inputMemory.Length <= Vector256<float>.Count)
             {
                 FillRmsNormRange(inputSpan, normWeightsSpan, inverseRootMeanSquare, outputSpan);
                 return;
             }
 
-            ThreadHelper.ForEachRange(output.Length, (startIndex, endIndex) =>
+            ThreadHelper.ForEachRange(outputMemory.Length, (startIndex, endIndex) =>
                 FillRmsNormRange(
-                    input.Span.Slice(startIndex, endIndex - startIndex),
-                    normWeights.Span.Slice(startIndex, endIndex - startIndex),
+                    inputMemory.Span.Slice(startIndex, endIndex - startIndex),
+                    normWeightsMemory.Span.Slice(startIndex, endIndex - startIndex),
                     inverseRootMeanSquare,
-                    output.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount, sizeof(float), Vector256<float>.Count * sizeof(float));
+                    outputMemory.Span.Slice(startIndex, endIndex - startIndex)), ThreadCount, sizeof(float), Vector256<float>.Count * sizeof(float));
         }
 
-        public void ForwardLmHead(ReadOnlyMemory<float> input, ReadOnlyMemory<byte> embeddingWeights, int rowLength, int vocabularySize, Memory<float> output)
+        public void ForwardLmHead(RuntimeTensor input, RuntimeTensor embeddingWeights, int rowLength, int vocabularySize, RuntimeTensor output)
         {
-            ValidationHelper.ValidateLmHeadArguments(input, embeddingWeights, rowLength, vocabularySize, output);
-            ReadOnlySpan<Half> embeddingWeightsSpan = MemoryMarshal.Cast<byte, Half>(embeddingWeights.Span);
+            ReadOnlyMemory<float> inputMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<float>(input, nameof(input));
+            ReadOnlyMemory<byte> embeddingWeightsMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<byte>(embeddingWeights, nameof(embeddingWeights));
+            Memory<float> outputMemory = RuntimeTensorBufferHelper.GetMemory<float>(output, nameof(output));
+            ValidationHelper.ValidateLmHeadArguments(inputMemory, embeddingWeightsMemory, rowLength, vocabularySize, outputMemory);
+            ReadOnlySpan<Half> embeddingWeightsSpan = MemoryMarshal.Cast<byte, Half>(embeddingWeightsMemory.Span);
 
             if (ThreadCount == 1 || vocabularySize <= 1)
             {
-                ProjectLmHeadSimdRange(input.Span, embeddingWeightsSpan, rowLength, output.Span[..vocabularySize]);
+                ProjectLmHeadSimdRange(inputMemory.Span, embeddingWeightsSpan, rowLength, outputMemory.Span[..vocabularySize]);
                 return;
             }
 
             ThreadHelper.ForEachRange(
                 vocabularySize,
                 (startIndex, endIndex) => ProjectLmHeadSimdRange(
-                    input.Span,
-                    MemoryMarshal.Cast<byte, Half>(embeddingWeights.Span.Slice(startIndex * rowLength * sizeof(ushort), (endIndex - startIndex) * rowLength * sizeof(ushort))),
+                    inputMemory.Span,
+                    MemoryMarshal.Cast<byte, Half>(embeddingWeightsMemory.Span.Slice(startIndex * rowLength * sizeof(ushort), (endIndex - startIndex) * rowLength * sizeof(ushort))),
                     rowLength,
-                    output.Span.Slice(startIndex, endIndex - startIndex)),
+                    outputMemory.Span.Slice(startIndex, endIndex - startIndex)),
                 ThreadCount,
                 checked(rowLength * sizeof(ushort)),
                 Vector256<float>.Count * sizeof(float));

@@ -58,26 +58,26 @@ namespace BitNetSharp.Nodes
                 throw new InvalidOperationException("Session does not contain feed-forward output.");
             }
 
-            ReadOnlyMemory<float> input = session.FeedForwardInput;
-            ReadOnlyMemory<float> residual = session.FeedForwardOutput;
-            Memory<float> output = session.Embedding;
+            RuntimeTensor input = session.FeedForwardInputTensor;
+            RuntimeTensor residual = session.FeedForwardOutputTensor;
+            RuntimeTensor output = session.EmbeddingTensor;
             int embeddingLength = checked((int)model.Config!.EmbeddingLength);
-            if (input.Length != embeddingLength)
+            if (!input.TryGet<ReadOnlyMemory<float>>(out ReadOnlyMemory<float> inputMemory) || inputMemory.Length != embeddingLength)
             {
                 throw new ArgumentException("Feed-forward residual input length does not match the model embedding length.", nameof(input));
             }
 
-            if (residual.Length != embeddingLength)
+            if (!residual.TryGet<ReadOnlyMemory<float>>(out ReadOnlyMemory<float> residualMemory) || residualMemory.Length != embeddingLength)
             {
                 throw new ArgumentException("Feed-forward residual source length does not match the model embedding length.", nameof(residual));
             }
 
-            if (output.Length < embeddingLength)
+            if (!output.TryGet<Memory<float>>(out Memory<float> outputMemory) || outputMemory.Length < embeddingLength)
             {
                 throw new ArgumentException("Feed-forward residual output length does not match the model embedding length.", nameof(output));
             }
 
-            opProvider.Add(input, residual, output[..embeddingLength]);
+            opProvider.Add(input, residual, output);
         }
 
         private void EnsureInitialized()

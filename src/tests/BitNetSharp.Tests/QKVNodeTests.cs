@@ -289,7 +289,10 @@ namespace BitNetSharp.Tests
         private static float[] ProjectWithProvider(IOPProvider provider, ReadOnlyMemory<float> input, ReadOnlyMemory<byte> packedWeights, int outputLength, float weightScale)
         {
             float[] output = new float[outputLength];
-            provider.ProjectBitNetI2(input, packedWeights, outputLength, weightScale, output);
+            RuntimeTensor inputTensor = RuntimeTensor.CreateReadOnly<float>("QKVTestInput", input, [input.Length]);
+            RuntimeTensor packedWeightsTensor = RuntimeTensor.CreateReadOnly<byte>("QKVTestWeights", packedWeights, [packedWeights.Length]);
+            RuntimeTensor outputTensor = RuntimeTensor.CreateWritable<float>("QKVTestOutput", output, [outputLength]);
+            provider.ProjectBitNetI2(inputTensor, packedWeightsTensor, outputLength, weightScale, outputTensor);
             return output;
         }
 

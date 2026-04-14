@@ -21,6 +21,7 @@ namespace BitNetSharp
 
         private readonly BitNetModel model;
         private readonly BitNetMemoryManager memoryManager;
+        private readonly Dictionary<string, RuntimeTensor> runtimeTensors = new(StringComparer.Ordinal);
         private int currentToken;
         private bool disposed;
 
@@ -57,6 +58,7 @@ namespace BitNetSharp
             }
 
             memoryManager.Release(Id);
+            runtimeTensors.Clear();
             disposed = true;
             GC.SuppressFinalize(this);
         }
@@ -95,64 +97,118 @@ namespace BitNetSharp
 
         public float[] TopKLogits { get; set; }
 
+        public RuntimeTensor EmbeddingTensor => GetOrCreateRuntimeTensor(EmbeddingKey);
+
+        public RuntimeTensor RmsNormTensor => GetOrCreateRuntimeTensor(RmsNormKey);
+
+        public RuntimeTensor QKVQueryTensor => GetOrCreateRuntimeTensor(QKVQueryKey);
+
+        public RuntimeTensor QKVKeyTensor => GetOrCreateRuntimeTensor(QKVKeyKey);
+
+        public RuntimeTensor QKVValueTensor => GetOrCreateRuntimeTensor(QKVValueKey);
+
+        public RuntimeTensor AttentionSubNormTensor => GetOrCreateRuntimeTensor(AttentionSubNormKey);
+
+        public RuntimeTensor AttentionOutputTensor => GetOrCreateRuntimeTensor(AttentionOutputKey);
+
+        public RuntimeTensor FeedForwardInputTensor => GetOrCreateRuntimeTensor(FeedForwardInputKey);
+
+        public RuntimeTensor FeedForwardNormTensor => GetOrCreateRuntimeTensor(FeedForwardNormKey);
+
+        public RuntimeTensor FeedForwardSubNormTensor => GetOrCreateRuntimeTensor(FeedForwardSubNormKey);
+
+        public RuntimeTensor FeedForwardOutputTensor => GetOrCreateRuntimeTensor(FeedForwardOutputKey);
+
+        public RuntimeTensor FinalNormOutputTensor => GetOrCreateRuntimeTensor(FinalNormOutputKey);
+
+        public RuntimeTensor LogitsTensor => GetOrCreateRuntimeTensor(LogitsKey);
+
+        /// <summary>
+        /// Gets the shared readonly weight tensor with the specified model tensor name.
+        /// </summary>
+        public RuntimeTensor GetWeightTensor(string name)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            return model.GetWeightTensor(name);
+        }
+
+        /// <summary>
+        /// Gets or creates the mutable runtime tensor for the specified session tensor name.
+        /// </summary>
+        public RuntimeTensor GetOrCreateRuntimeTensor(string name)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+            if (runtimeTensors.TryGetValue(name, out RuntimeTensor? tensor))
+            {
+                return tensor;
+            }
+
+            tensor = CreateRuntimeTensor(name);
+            runtimeTensors.Add(name, tensor);
+            return tensor;
+        }
+
         public Memory<float> Embedding
         {
-            get => GetOrCreateFloatMemory(EmbeddingKey, GetEmbeddingLength());
-            set => SetMemory(EmbeddingKey, value);
+            get => GetRuntimeMemory<float>(EmbeddingKey);
+            set => CopyToRuntimeTensor<float>(EmbeddingKey, value);
         }
 
         public Memory<float> RmsNorm
         {
-            get => GetOrCreateFloatMemory(RmsNormKey, GetEmbeddingLength());
-            set => SetMemory(RmsNormKey, value);
+            get => GetRuntimeMemory<float>(RmsNormKey);
+            set => CopyToRuntimeTensor<float>(RmsNormKey, value);
         }
 
         public Memory<float> QKVQuery
         {
-            get => GetOrCreateFloatMemory(QKVQueryKey, GetEmbeddingLength());
-            set => SetMemory(QKVQueryKey, value);
+            get => GetRuntimeMemory<float>(QKVQueryKey);
+            set => CopyToRuntimeTensor<float>(QKVQueryKey, value);
         }
 
         public Memory<float> QKVKey
         {
-            get => GetOrCreateFloatMemory(QKVKeyKey, GetKeyValueProjectionLength());
-            set => SetMemory(QKVKeyKey, value);
+            get => GetRuntimeMemory<float>(QKVKeyKey);
+            set => CopyToRuntimeTensor<float>(QKVKeyKey, value);
         }
 
         public Memory<float> QKVValue
         {
-            get => GetOrCreateFloatMemory(QKVValueKey, GetKeyValueProjectionLength());
-            set => SetMemory(QKVValueKey, value);
+            get => GetRuntimeMemory<float>(QKVValueKey);
+            set => CopyToRuntimeTensor<float>(QKVValueKey, value);
         }
 
         public Memory<float> AttentionSubNorm
         {
-            get => GetOrCreateFloatMemory(AttentionSubNormKey, GetEmbeddingLength());
-            set => SetMemory(AttentionSubNormKey, value);
+            get => GetRuntimeMemory<float>(AttentionSubNormKey);
+            set => CopyToRuntimeTensor<float>(AttentionSubNormKey, value);
         }
 
         public Memory<float> AttentionOutput
         {
-            get => GetOrCreateFloatMemory(AttentionOutputKey, GetEmbeddingLength());
-            set => SetMemory(AttentionOutputKey, value);
+            get => GetRuntimeMemory<float>(AttentionOutputKey);
+            set => CopyToRuntimeTensor<float>(AttentionOutputKey, value);
         }
-        //TODO:hot path, do not need to check if contains key
-        public Memory<float> FeedForwardInput => GetOrCreateFloatMemory(FeedForwardInputKey, GetEmbeddingLength());
 
-        public Memory<float> FeedForwardNorm => GetOrCreateFloatMemory(FeedForwardNormKey, GetEmbeddingLength());
+        public Memory<float> FeedForwardInput => GetRuntimeMemory<float>(FeedForwardInputKey);
 
-        public Memory<float> FeedForwardSubNorm => GetOrCreateFloatMemory(FeedForwardSubNormKey, GetFeedForwardLength());
+        public Memory<float> FeedForwardNorm => GetRuntimeMemory<float>(FeedForwardNormKey);
 
-        public Memory<float> FeedForwardOutput => GetOrCreateFloatMemory(FeedForwardOutputKey, GetEmbeddingLength());
+        public Memory<float> FeedForwardSubNorm => GetRuntimeMemory<float>(FeedForwardSubNormKey);
 
-        public Memory<float> FinalNormOutput => GetOrCreateFloatMemory(FinalNormOutputKey, GetEmbeddingLength());
+        public Memory<float> FeedForwardOutput => GetRuntimeMemory<float>(FeedForwardOutputKey);
 
-        public Memory<float> Logits => GetOrCreateFloatMemory(LogitsKey, GetVocabularySize());
+        public Memory<float> FinalNormOutput => GetRuntimeMemory<float>(FinalNormOutputKey);
+
+        public Memory<float> Logits => GetRuntimeMemory<float>(LogitsKey);
 
         internal bool HasMemory<T>(string key) where T : unmanaged
         {
             ObjectDisposedException.ThrowIf(disposed, this);
-            return memoryManager.TryGetMemory<T>(Id, key, out _);
+
+            return runtimeTensors.TryGetValue(key, out RuntimeTensor? tensor) && tensor.TryGet<Memory<T>>(out _);
         }
 
         private Memory<T> GetMemory<T>(string key) where T : unmanaged
@@ -164,19 +220,90 @@ namespace BitNetSharp
                 : Memory<T>.Empty;
         }
 
-        private Memory<float> GetOrCreateFloatMemory(string key, int length)
+        private Memory<T> GetRuntimeMemory<T>(string key)
+            where T : unmanaged
         {
-            ObjectDisposedException.ThrowIf(disposed, this);
+            RuntimeTensor tensor = GetOrCreateRuntimeTensor(key);
+            if (tensor.TryGet<Memory<T>>(out Memory<T> memory))
+            {
+                return memory;
+            }
 
-            return memoryManager.TryGetMemory<float>(Id, key, out Memory<float> memory)
-                ? memory
-                : memoryManager.RequestMemory<float>(Id, key, length);
+            throw new InvalidOperationException($"Runtime tensor '{key}' does not expose '{typeof(T)}' memory.");
         }
 
         private void SetMemory<T>(string key, Memory<T> value) where T : unmanaged
         {
             ObjectDisposedException.ThrowIf(disposed, this);
             WriteMemory(key, value);
+        }
+
+        private void CopyToRuntimeTensor<T>(string key, Memory<T> value)
+            where T : unmanaged
+        {
+            RuntimeTensor tensor = GetOrCreateRuntimeTensor(key);
+            tensor.CopyFrom<T>(value);
+        }
+
+        private RuntimeTensor CreateRuntimeTensor(string name)
+        {
+            return name switch
+            {
+                EmbeddingKey => CreateRuntimeTensor<float>(name, GetEmbeddingLength()),
+                RmsNormKey => CreateRuntimeTensor<float>(name, GetEmbeddingLength()),
+                QKVQueryKey => CreateRuntimeTensor<float>(name, GetEmbeddingLength()),
+                QKVKeyKey => CreateRuntimeTensor<float>(name, GetKeyValueProjectionLength()),
+                QKVValueKey => CreateRuntimeTensor<float>(name, GetKeyValueProjectionLength()),
+                AttentionSubNormKey => CreateRuntimeTensor<float>(name, GetEmbeddingLength()),
+                AttentionOutputKey => CreateRuntimeTensor<float>(name, GetEmbeddingLength()),
+                FeedForwardInputKey => CreateRuntimeTensor<float>(name, GetEmbeddingLength()),
+                FeedForwardNormKey => CreateRuntimeTensor<float>(name, GetEmbeddingLength()),
+                FeedForwardSubNormKey => CreateRuntimeTensor<float>(name, GetFeedForwardLength()),
+                FeedForwardOutputKey => CreateRuntimeTensor<float>(name, GetEmbeddingLength()),
+                FinalNormOutputKey => CreateRuntimeTensor<float>(name, GetEmbeddingLength()),
+                LogitsKey => CreateRuntimeTensor<float>(name, GetVocabularySize()),
+                _ => throw new InvalidOperationException($"Unknown runtime tensor '{name}'."),
+            };
+        }
+
+        private RuntimeTensor CreateRuntimeTensor<T>(string name, int length)
+            where T : unmanaged
+        {
+            Memory<T> memory = memoryManager.RequestMemory<T>(Id, name, length);
+            return new RuntimeTensor(
+                name,
+                typeof(T),
+                [length],
+                isReadOnly: false,
+                requestedType =>
+                {
+                    if (requestedType == typeof(Memory<T>))
+                    {
+                        return (true, memory);
+                    }
+
+                    if (requestedType == typeof(ReadOnlyMemory<T>))
+                    {
+                        return (true, (ReadOnlyMemory<T>)memory);
+                    }
+
+                    return (false, null);
+                },
+                (elementType, source) =>
+                {
+                    if (elementType != typeof(T) || source is not ReadOnlyMemory<T> typedSource)
+                    {
+                        return false;
+                    }
+
+                    if (typedSource.Length > memory.Length)
+                    {
+                        throw new ArgumentException($"Source length for runtime tensor '{name}' exceeds the allocated buffer.", nameof(source));
+                    }
+
+                    typedSource.Span.CopyTo(memory.Span);
+                    return true;
+                });
         }
 
         private void WriteMemory<T>(string key, Memory<T> value) where T : unmanaged

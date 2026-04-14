@@ -1028,3 +1028,76 @@ inpL
 - 先建立清晰、稳定的推理骨架
 - 再逐步替换热点线性层为 `BitNet` 优化实现
 - 最后在 `CPU` 上围绕内存布局、缓存命中和向量化持续优化
+
+---
+
+## 17. 当前运行时架构最新收敛
+
+> 本节用于记录当前讨论后的最新结论。若与前文早期草案存在冲突，运行时、图结构和张量抽象相关内容以本节为准。
+
+### 17.1 `Graph`
+
+- `Graph` 只保留纯计算图信息
+- `Graph` 内部仅包含 layer 与依赖关系
+- 不引入 `IRuntimeNode`
+- 不把线程切分、语义标签、调试状态或内存查表逻辑直接放入 `Graph`
+
+### 17.2 `GraphView`
+
+- `GraphView` 负责暴露语义解释与执行视图
+- 可用于表达不同计算块的逻辑含义、阶段划分与线程切分信息
+- `GraphView` 是 view，不是运行时状态中心
+
+### 17.3 `BitNetSession`
+
+- `BitNetSession` 保留会话状态与执行期标量信息
+- `BitNetSession` 不再继续膨胀为大量语义中间缓冲区属性集合
+- `BitNetSession` 通过构造函数接收内存管理相关依赖，而不是在内部自行创建
+- `BitNetSession` 持有会话私有的 `RuntimeMemoryManager`
+- `BitNetSession` 同时引用由 `Model` 创建并持有的共享权重 `MemoryManager`
+- 简单标量如 `CurrentToken` 仍应保留为普通属性，而不是放入 `MemoryManager`
+- `BitNetSession` 对外提供 `GetWeightTensor(string name)` 与 `GetOrCreateRuntimeTensor(string name)` 作为统一张量访问入口
+- `BitNetSession` 可以继续暴露少量语义化属性，以缓存常用 runtime tensor 的访问结果
+
+### 17.4 `MemoryManager`
+
+- `MemoryManager` 的职责保持在共享内存管理与模型权重加载落点
+- 按当前收敛方向，内存域分为共享权重区与会话运行时区两类
+- 权重 `MemoryManager` 由 `Model` 创建并持有，因此天然对每个模型唯一，并可被多个 `Session` 共享
+- 运行时 `MemoryManager` 由 `Session` 持有，用于激活、中间结果、`KV Cache` 与其他执行期数据
+- `Session` 对外作为 `RuntimeTensor` 的统一创建入口，`MemoryManager` 作为其内部落点与生命周期管理者
+- `MemoryManager` 负责底层内存对象的生命周期、复用与必要时的强制回收
+- `OP` 不直接接收 `MemoryManager`
+
+### 17.5 `RuntimeTensor`
+
+- `Graph` 与 `Runtime` 内部仅流转非泛型 `RuntimeTensor`
+- `RuntimeTensor` 负责暴露张量的运行时描述信息，例如 `Shape`、元素类型与后端信息
+- `RuntimeTensor` 提供统一的泛型访问入口 `TryGet<T>`
+- `RuntimeTensor` 需要为 runtime tensor 提供从 `Memory<T>` 或 `ReadOnlyMemory<T>` 灌入数据的能力，以支持初始化总是从 `CPU` 开始的场景
+- 权重 tensor 不需要额外的 `Memory<T>` 灌入能力，权重装载由 `Model` 读取流程负责
+- `TryGet<T>` 的目标是让 `OP` 在需要时拿到具体底层对象，例如 `Memory<float>`、`IMemoryView<float>` 或未来的设备内存对象
+- `RuntimeTensor` 不直接暴露 `MemoryManager` 给外部
+- 当前更偏向让 `RuntimeTensor` 通过绑定委托实现 `TryGet<T>`，而不是额外引入 `StorageHandle`
+- 对共享权重 tensor，应优先采用绑定共享只读底层对象的方式，而不是在每个 `Session` 内重复复制权重
+
+### 17.6 `RuntimeTensor` 与底层数据绑定
+
+- 可以考虑在 `RuntimeTensor` 内缓存已绑定的数据访问对象，以避免执行期反复进行 `MemoryManager` 字典查找
+- 但 `RuntimeTensor` 只持有访问引用，不拥有底层内存生命周期
+- 底层对象仍由 `MemoryManager` 管理，`RuntimeTensor` 仅提供受控访问入口
+- 若底层对象被 `MemoryManager` 回收或失效，`RuntimeTensor.TryGet<T>` 应体现失败语义，而不是隐式继续返回失效对象
+
+### 17.7 `OP` 与后端访问
+
+- `OP` 的输入输出统一使用 `RuntimeTensor`
+- `OP` 内部最终仍然可以通过 `TryGet<T>` 取得实际要操作的内存对象
+- 不在 `OP` 签名中使用 `RuntimeTensor<Memory<float>>` 这类泛型张量类型，以避免破坏未来的动态组装能力
+- 泛型应保留在“获取具体对象”这一层，而不应成为运行时核心张量身份的一部分
+
+### 17.8 当前阶段的简化原则
+
+- 不额外引入过重的 backend 抽象层
+- 不提前做版本化内存追踪
+- 不为了未来 GPU/NPU 过度设计当前 CPU 路径
+- 但核心抽象要保留扩展空间，使未来设备后端仍可通过 `RuntimeTensor.TryGet<T>` 接入具体底层对象

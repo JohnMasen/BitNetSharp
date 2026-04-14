@@ -19,7 +19,7 @@
 - Keep `doc/ImplementProgress.md` updated whenever layers or their test files are added or changed.
 - For this repo's runtime design, do not introduce `IRuntimeNode`. Keep `RuntimeGraph` layer-only, and handle any non-layer operations by intercepting calls inside `Runtime` during execution instead of modeling them as graph nodes.
 - For this repo's runtime graph design, do not use DI to instantiate layers from graph deserialization. DI is not intended as the graph-deserialization mechanism here.
-- For this repo's runtime architecture, prefer `Layer` types to have parameterless constructors so they can be safely dynamically instantiated and deserialized from graph definitions.
+- For this repo's runtime architecture, prefer `Layer` types to have parameterless constructors so they can be safely dynamically instantiated and deserialized from graph definitions. The user is considering keeping the graph as a pure computation graph, exposing semantics and execution views through `GraphView`, and passing `RuntimeTensor` objects to operators as the semantic tensor access abstraction over `MemoryManager`, including shape metadata.
 - Prefer `BitNetRuntime` itself to act as the layer-wrapping factory for logging and performance-monitoring wrappers, keeping wrappers scoped to runtime-only observability rather than general runtime capabilities.
 - For this repo's runtime roadmap, do not implement aggregated/fused layers yet. Treat layer aggregation as a future optimization path, especially for SIMD/GPU backends, and prefer a future `GraphOptimizer` to analyze and rewrite the layer-only graph for performance.
 - Treat `SamplingStep` as a `Layer` so `BitNetRuntime` stays model-agnostic; the graph should ultimately output a string. Prefer exposing configurable layer properties through layer-level attributes rather than a runtime-wide property bag unless a later cross-layer need proves necessary.
@@ -39,12 +39,25 @@
 - For this repo's OP provider refactor, `IOPProvider2` still needs changes, but implementation work should follow an explicit modification strategy and future architecture plan rather than ad-hoc edits.
 - **Plan to move multithreading implementation back from `IOPProvider2` into `IOPProvider`, prepare to deprecate `IOPProvider2`, design `Graph` next, and update current inference tests to call `IOPProvider` only.**
 - When migrating inference-related implementations, include sufficient comments to facilitate future design reference for the Graph.
+- In this repo's runtime/session design, consider removing semantic session buffer properties like `FeedForwardInput` and `FeedForwardNorm` and exposing only `MemoryManager` for operators to access memory blocks directly. **Weight tensors do not need Memory<T>-based copy-in because weights are loaded during model read. Session should expose `GetWeightTensor(string name)` for shared model weights and `GetRuntimeTensor(string name)` for runtime tensors, while external session properties may cache these tensors and assembly should pass those cached tensor properties directly into operators.**
+- For this repo's runtime tensor design, prefer a single non-generic `RuntimeTensor` with a generic `TryGet<T>` access API, with access implemented through a bound delegate rather than passing `MemoryManager` directly into operators. Operators should compute against `RuntimeTensor` without binding to a specific memory type, to support future GPU/NPU backends. **Additionally, CPU-bound tensors can implement host-side typed access interfaces like `IRuntimeTensorHost<float>` and `IRuntimeTensorHost<byte>` instead of introducing more complex backend abstractions.** Because tensors and operators may be dynamically assembled in the future, avoid generic-based core runtime abstractions where possible.
+- For this repo's runtime tensor design, provide a generic TryGetHostBuffer-style API so operators can access the actual underlying memory object, including future GPU memory, because operators ultimately need to manipulate concrete memory objects internally.
+- For this repo's runtime tensor discussion, consider a simpler model where a tensor acts as data description plus a MemoryManager identifier/key, while operators access underlying memory through that indirection.
+- For this repo's managed runtime design, avoid object-centric core tensor storage to reduce casting boilerplate associated with passing raw memory block objects or GPU memory objects in C#.
+- For this repo's runtime tensor design, the user is considering a two-level model with non-generic `RuntimeTensor` plus derived `RuntimeTensor<T>`, where the generic layer may provide implicit conversions to Memory-like types, and the previous `StorageHandle` indirection is replaced by a bound delegate-based access path.
+- For this repo's runtime tensor design, do not pass `MemoryManager` into operators and avoid adding another `StorageHandle` layer, while still providing a generic Get-style API that allows operators to access concrete memory elegantly.
+- For this repo's runtime design, keep only non-generic `RuntimeTensor` inside graph/runtime because dynamic assembly is required; avoid relying on `RuntimeTensor<Memory<float>>` in operator signatures since that blocks dynamic assembly.
+- **Consider whether `RuntimeTensor` could hold the concrete data object directly to avoid `MemoryManager` dictionary lookups, while recognizing lifecycle management as the key risk.**
+- For this repo's architecture discussions, prefer the latest consolidated design summary over intermediate discussion fragments; avoid relying on partial earlier memory snippets when reasoning about current runtime design.
+- For architecture discussion summaries, write them under the `doc/archdesign` path as markdown documents.
+- For this repo's runtime design, `RuntimeTensor` should support copying data in from `Memory<T>` for CPU-origin initialization. The user prefers `Session` to create tensors via its internal `MemoryManager`, while multiple sessions should share a single immutable weight copy instead of duplicating model weights per session.
 
 ## QKV Parallel Work Instructions
 - For QKV parallel work, `ThreadHelper` should support optional block-aligned splitting. Default splitting should not enforce alignment; only SIMD callers should pass an alignment parameter based on the required data byte length.
 
 ## Code Style
 - Prefer `for` loops to initialize the index variable inside the `for` statement rather than using a prior assignment like `int index = 0; for (; index < ...; ... )`.
+- Use English for code comments/XML documentation when adding interface documentation in this repo.
 
 ## Tokenizer Testing Instructions
 - Separate tokenizer tests into `TokenizerTests.cs`.

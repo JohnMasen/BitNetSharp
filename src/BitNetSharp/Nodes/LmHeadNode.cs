@@ -13,7 +13,7 @@ namespace BitNetSharp.Nodes
         private readonly BitNetModel model;
         private readonly BitNetTensorInfo tokenEmbedding;
         private readonly IOPProvider opProvider;
-        private byte[]? cachedEmbeddingWeights;
+        private RuntimeTensor? cachedEmbeddingWeights;
         private bool isInitialized;
 
         public LmHeadNode(BitNetModel model, bool enableCache = false, Nodes.InferenceConfig? inferenceConfig = null)
@@ -68,28 +68,24 @@ namespace BitNetSharp.Nodes
                 throw new InvalidOperationException("Session does not contain final norm output.");
             }
 
-            ReadOnlyMemory<float> input = session.FinalNormOutput;
-            Memory<float> output = session.Logits;
+            RuntimeTensor input = session.FinalNormOutputTensor;
+            RuntimeTensor output = session.LogitsTensor;
             int embeddingLength = checked((int)model.Config!.EmbeddingLength);
             int vocabularySize = checked((int)model.Config.VocabularySize);
-            if (input.Length != embeddingLength)
+            if (!input.TryGet<ReadOnlyMemory<float>>(out ReadOnlyMemory<float> inputMemory) || inputMemory.Length != embeddingLength)
             {
                 throw new ArgumentException("Input length does not match the model embedding length.", nameof(input));
             }
 
-            if (output.Length < vocabularySize)
+            if (!output.TryGet<Memory<float>>(out Memory<float> outputMemory) || outputMemory.Length < vocabularySize)
             {
                 throw new ArgumentException("Output length does not match the model vocabulary size.", nameof(output));
             }
 
-            if (EnableCache)
-            {
-                opProvider.ForwardLmHead(input, EnsureCachedEmbeddingWeights(), embeddingLength, vocabularySize, output);
-                return;
-            }
-
-            using var tensorData = model.ReadTensorData(tokenEmbedding);
-            opProvider.ForwardLmHead(input, tensorData.Memory[..GetEmbeddingWeightByteCount()], embeddingLength, vocabularySize, output);
+            RuntimeTensor embeddingWeights = EnableCache
+                ? EnsureCachedEmbeddingWeights()
+                : session.GetWeightTensor(tokenEmbedding.Name);
+            opProvider.ForwardLmHead(input, embeddingWeights, embeddingLength, vocabularySize, output);
         }
 
         private void ValidateTensorShape()
@@ -117,20 +113,9 @@ namespace BitNetSharp.Nodes
             }
         }
 
-        private int GetEmbeddingWeightByteCount()
+        private RuntimeTensor EnsureCachedEmbeddingWeights()
         {
-            return checked((int)model.Config!.EmbeddingLength * (int)model.Config.VocabularySize * sizeof(ushort));
-        }
-
-        private byte[] ReadEmbeddingWeights()
-        {
-            using var tensorData = model.ReadTensorData(tokenEmbedding);
-            return tensorData.Memory[..GetEmbeddingWeightByteCount()].ToArray();
-        }
-
-        private byte[] EnsureCachedEmbeddingWeights()
-        {
-            return cachedEmbeddingWeights ??= ReadEmbeddingWeights();
+            return cachedEmbeddingWeights ??= model.GetWeightTensor(tokenEmbedding.Name);
         }
 
         private void EnsureInitialized()

@@ -58,26 +58,26 @@ namespace BitNetSharp.Nodes
                 throw new InvalidOperationException("Session does not contain attention output.");
             }
 
-            ReadOnlyMemory<float> input = session.Embedding;
-            ReadOnlyMemory<float> residual = session.AttentionOutput;
-            Memory<float> output = session.FeedForwardInput;
+            RuntimeTensor input = session.EmbeddingTensor;
+            RuntimeTensor residual = session.AttentionOutputTensor;
+            RuntimeTensor output = session.FeedForwardInputTensor;
             int embeddingLength = checked((int)model.Config!.EmbeddingLength);
-            if (input.Length != embeddingLength)
+            if (!input.TryGet<ReadOnlyMemory<float>>(out ReadOnlyMemory<float> inputMemory) || inputMemory.Length != embeddingLength)
             {
                 throw new ArgumentException("Residual input length does not match the model embedding length.", nameof(input));
             }
 
-            if (residual.Length != embeddingLength)
+            if (!residual.TryGet<ReadOnlyMemory<float>>(out ReadOnlyMemory<float> residualMemory) || residualMemory.Length != embeddingLength)
             {
                 throw new ArgumentException("Residual source length does not match the model embedding length.", nameof(residual));
             }
 
-            if (output.Length < embeddingLength)
+            if (!output.TryGet<Memory<float>>(out Memory<float> outputMemory) || outputMemory.Length < embeddingLength)
             {
                 throw new ArgumentException("Residual output length does not match the model embedding length.", nameof(output));
             }
 
-            opProvider.Add(input, residual, output[..embeddingLength]);
+            opProvider.Add(input, residual, output);
         }
 
         private void EnsureInitialized()

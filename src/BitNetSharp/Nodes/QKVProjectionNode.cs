@@ -89,17 +89,17 @@ namespace BitNetSharp.Nodes
                 throw new InvalidOperationException("Session does not contain RMSNorm output.");
             }
 
-            ReadOnlyMemory<float> input = session.RmsNorm;
-            Memory<float> query = session.QKVQuery;
-            Memory<float> key = session.QKVKey;
-            Memory<float> value = session.QKVValue;
-            if (input.IsEmpty)
+            RuntimeTensor input = session.RmsNormTensor;
+            RuntimeTensor query = session.QKVQueryTensor;
+            RuntimeTensor key = session.QKVKeyTensor;
+            RuntimeTensor value = session.QKVValueTensor;
+            if (!input.TryGet<ReadOnlyMemory<float>>(out ReadOnlyMemory<float> inputMemory) || inputMemory.IsEmpty)
             {
                 throw new ArgumentException("Input must not be empty.", nameof(input));
             }
 
             int expectedInputLength = checked((int)model.Config!.EmbeddingLength);
-            if (input.Length != expectedInputLength)
+            if (inputMemory.Length != expectedInputLength)
             {
                 throw new ArgumentException("Input length does not match the model embedding length.", nameof(input));
             }
@@ -112,12 +112,13 @@ namespace BitNetSharp.Nodes
                 PackedProjectionWeights cachedQueryWeights = EnsureCachedQueryWeights();
                 PackedProjectionWeights cachedKeyWeights = EnsureCachedKeyWeights();
                 PackedProjectionWeights cachedValueWeights = EnsureCachedValueWeights();
-                using IMemoryOwner<sbyte> quantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(input.Length);
-                Memory<sbyte> quantizedValues = quantizedValuesOwner.Memory[..input.Length];
-                (float activationScale, _) = opProvider.QuantizeBitNetActivations(input, quantizedValues);
-                opProvider.ProjectBitNetI2(quantizedValues, activationScale, cachedQueryWeights.PackedWeights, queryOutputLength, cachedQueryWeights.Scale, query);
-                opProvider.ProjectBitNetI2(quantizedValues, activationScale, cachedKeyWeights.PackedWeights, keyValueOutputLength, cachedKeyWeights.Scale, key);
-                opProvider.ProjectBitNetI2(quantizedValues, activationScale, cachedValueWeights.PackedWeights, keyValueOutputLength, cachedValueWeights.Scale, value);
+                using IMemoryOwner<sbyte> quantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(inputMemory.Length);
+                Memory<sbyte> quantizedValues = quantizedValuesOwner.Memory[..inputMemory.Length];
+                RuntimeTensor quantizedTensor = RuntimeTensor.CreateWritable("QKVQuantizedValues", quantizedValues, [inputMemory.Length]);
+                (float activationScale, _) = opProvider.QuantizeBitNetActivations(input, quantizedTensor);
+                opProvider.ProjectBitNetI2(quantizedTensor, activationScale, CreatePackedWeightTensor(cachedQueryWeights.PackedWeights, "CachedQKVQueryWeights"), queryOutputLength, cachedQueryWeights.Scale, query);
+                opProvider.ProjectBitNetI2(quantizedTensor, activationScale, CreatePackedWeightTensor(cachedKeyWeights.PackedWeights, "CachedQKVKeyWeights"), keyValueOutputLength, cachedKeyWeights.Scale, key);
+                opProvider.ProjectBitNetI2(quantizedTensor, activationScale, CreatePackedWeightTensor(cachedValueWeights.PackedWeights, "CachedQKVValueWeights"), keyValueOutputLength, cachedValueWeights.Scale, value);
                 return;
             }
 
@@ -128,12 +129,18 @@ namespace BitNetSharp.Nodes
             PackedProjectionWeights keyWeights = ParsePackedWeights(keyTensorData.Memory, keyTensor, "QKV key");
             PackedProjectionWeights valueWeights = ParsePackedWeights(valueTensorData.Memory, valueTensor, "QKV value");
 
-            using IMemoryOwner<sbyte> uncachedQuantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(input.Length);
-            Memory<sbyte> uncachedQuantizedValues = uncachedQuantizedValuesOwner.Memory[..input.Length];
-            (float uncachedActivationScale, _) = opProvider.QuantizeBitNetActivations(input, uncachedQuantizedValues);
-            opProvider.ProjectBitNetI2(uncachedQuantizedValues, uncachedActivationScale, queryWeights.PackedWeights, queryOutputLength, queryWeights.Scale, query);
-            opProvider.ProjectBitNetI2(uncachedQuantizedValues, uncachedActivationScale, keyWeights.PackedWeights, keyValueOutputLength, keyWeights.Scale, key);
-            opProvider.ProjectBitNetI2(uncachedQuantizedValues, uncachedActivationScale, valueWeights.PackedWeights, keyValueOutputLength, valueWeights.Scale, value);
+            using IMemoryOwner<sbyte> uncachedQuantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(inputMemory.Length);
+            Memory<sbyte> uncachedQuantizedValues = uncachedQuantizedValuesOwner.Memory[..inputMemory.Length];
+            RuntimeTensor uncachedQuantizedTensor = RuntimeTensor.CreateWritable("QKVQuantizedValues", uncachedQuantizedValues, [inputMemory.Length]);
+            (float uncachedActivationScale, _) = opProvider.QuantizeBitNetActivations(input, uncachedQuantizedTensor);
+            opProvider.ProjectBitNetI2(uncachedQuantizedTensor, uncachedActivationScale, CreatePackedWeightTensor(queryWeights.PackedWeights, "QKVQueryWeights"), queryOutputLength, queryWeights.Scale, query);
+            opProvider.ProjectBitNetI2(uncachedQuantizedTensor, uncachedActivationScale, CreatePackedWeightTensor(keyWeights.PackedWeights, "QKVKeyWeights"), keyValueOutputLength, keyWeights.Scale, key);
+            opProvider.ProjectBitNetI2(uncachedQuantizedTensor, uncachedActivationScale, CreatePackedWeightTensor(valueWeights.PackedWeights, "QKVValueWeights"), keyValueOutputLength, valueWeights.Scale, value);
+        }
+
+        private static RuntimeTensor CreatePackedWeightTensor(ReadOnlyMemory<byte> packedWeights, string name)
+        {
+            return RuntimeTensor.CreateReadOnly<byte>(name, packedWeights, [packedWeights.Length]);
         }
 
         private PackedProjectionWeights ReadPackedWeights(BitNetTensorInfo tensor)

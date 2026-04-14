@@ -7,6 +7,9 @@ namespace BitNetSharp.Models
 {
     public class BitNetModel : IDisposable
     {
+        private readonly BitNetMemoryManager weightMemoryManager = new();
+        private readonly Dictionary<string, RuntimeTensor> weightTensors = new(StringComparer.Ordinal);
+        private readonly Guid weightSessionId = Guid.NewGuid();
         private bool disposed;
         private GGUFFile? loadedFile;
         private GGUFReader? loadedReader;
@@ -42,6 +45,9 @@ namespace BitNetSharp.Models
         {
             ObjectDisposedException.ThrowIf(disposed, this);
 
+            weightMemoryManager.Release(weightSessionId);
+            weightTensors.Clear();
+
             if (string.IsNullOrWhiteSpace(ggufPath))
             {
                 throw new ArgumentException("GGUF path must not be empty.", nameof(ggufPath));
@@ -64,6 +70,86 @@ namespace BitNetSharp.Models
             rawTensorIndex = file.TensorInfos.ToDictionary(tensor => tensor.Name, StringComparer.Ordinal);
             GlobalTensors = BitNetTensorIndexBuilder.CreateGlobalTensors(tensorIndex);
             Layers = BitNetLayerBuilder.Create(tensorIndex, checked((int)Config.BlockCount));
+        }
+
+        /// <summary>
+        /// Gets a shared readonly runtime tensor for the requested model weight.
+        /// </summary>
+        public RuntimeTensor GetWeightTensor(string tensorName)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+
+            if (string.IsNullOrWhiteSpace(tensorName))
+            {
+                throw new ArgumentException("Tensor name must not be empty.", nameof(tensorName));
+            }
+
+            if (weightTensors.TryGetValue(tensorName, out RuntimeTensor? cachedTensor))
+            {
+                return cachedTensor;
+            }
+
+            if (!TensorIndex.TryGetValue(tensorName, out BitNetTensorInfo? tensorInfo))
+            {
+                throw new InvalidOperationException($"Required tensor '{tensorName}' was not found.");
+            }
+
+            RuntimeTensor tensor = CreateWeightTensor(tensorInfo);
+            weightTensors.Add(tensorName, tensor);
+            return tensor;
+        }
+
+        private RuntimeTensor CreateWeightTensor(BitNetTensorInfo tensorInfo)
+        {
+            using IMemoryOwner<byte> tensorData = ReadTensorData(tensorInfo.Name);
+            return ShouldExposeAsFloatTensor(tensorInfo)
+                ? CreateSingleWeightTensor(tensorInfo, tensorData.Memory)
+                : CreateByteWeightTensor(tensorInfo, tensorData.Memory);
+        }
+
+        private RuntimeTensor CreateByteWeightTensor(BitNetTensorInfo tensorInfo, ReadOnlyMemory<byte> tensorData)
+        {
+            Memory<byte> buffer = weightMemoryManager.RequestMemory<byte>(weightSessionId, tensorInfo.Name, tensorData.Length);
+            tensorData.CopyTo(buffer);
+            return RuntimeTensor.CreateReadOnly<byte>(
+                tensorInfo.Name,
+                buffer,
+                tensorInfo.Dimensions.Select(static dimension => checked((int)dimension)));
+        }
+
+        private RuntimeTensor CreateSingleWeightTensor(BitNetTensorInfo tensorInfo, ReadOnlyMemory<byte> tensorData)
+        {
+            int elementCount = checked(tensorInfo.Dimensions.Aggregate<ulong, int>(1, static (count, dimension) => checked(count * (int)dimension)));
+            Memory<float> buffer = weightMemoryManager.RequestMemory<float>(weightSessionId, tensorInfo.Name, elementCount);
+
+            switch (tensorInfo.TensorType)
+            {
+                case GGUFTensorType.GGML_TYPE_F32:
+                    MemoryMarshal.Cast<byte, float>(tensorData.Span[..checked(elementCount * sizeof(float))]).CopyTo(buffer.Span);
+                    break;
+                case GGUFTensorType.GGML_TYPE_F16:
+                {
+                    ReadOnlySpan<Half> source = MemoryMarshal.Cast<byte, Half>(tensorData.Span[..checked(elementCount * sizeof(ushort))]);
+                    for (int index = 0; index < elementCount; index++)
+                    {
+                        buffer.Span[index] = (float)source[index];
+                    }
+
+                    break;
+                }
+                default:
+                    throw new NotSupportedException($"Tensor '{tensorInfo.Name}' type '{tensorInfo.TensorType}' cannot be exposed as float weights.");
+            }
+
+            return RuntimeTensor.CreateReadOnly<float>(
+                tensorInfo.Name,
+                buffer,
+                tensorInfo.Dimensions.Select(static dimension => checked((int)dimension)));
+        }
+
+        private static bool ShouldExposeAsFloatTensor(BitNetTensorInfo tensorInfo)
+        {
+            return !tensorInfo.IsQuantized && tensorInfo.Role != BitNetTensorRole.TokenEmbedding;
         }
 
         /// <summary>
@@ -136,6 +222,8 @@ namespace BitNetSharp.Models
                 return;
             }
 
+            weightMemoryManager.Dispose();
+            weightTensors.Clear();
             Tokenizer = null;
             TokenizerConfig = null;
             GlobalTensors = null;

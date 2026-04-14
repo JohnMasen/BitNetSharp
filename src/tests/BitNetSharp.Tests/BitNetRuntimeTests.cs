@@ -133,23 +133,28 @@ namespace BitNetSharp.Tests
 
         private static void ExecuteQKVProjection(global::BitNetSharp.Models.BitNetModel model, BitNetSession session, IOPProvider opProvider, global::BitNetSharp.Models.BitNetLayerDefinition layer)
         {
-            ReadOnlyMemory<float> input = session.RmsNorm;
-            Memory<float> query = session.QKVQuery;
-            Memory<float> key = session.QKVKey;
-            Memory<float> value = session.QKVValue;
+            RuntimeTensor input = session.RmsNormTensor;
+            RuntimeTensor query = session.QKVQueryTensor;
+            RuntimeTensor key = session.QKVKeyTensor;
+            RuntimeTensor value = session.QKVValueTensor;
+            if (!input.TryGet<ReadOnlyMemory<float>>(out ReadOnlyMemory<float> inputMemory))
+            {
+                throw new InvalidOperationException("Runtime test input tensor does not expose float memory.");
+            }
             (byte[] PackedWeights, float Scale) queryWeights = ReadPackedWeights(model, layer.AttentionQueryWeight, "QKV query");
             (byte[] PackedWeights, float Scale) keyWeights = ReadPackedWeights(model, layer.AttentionKeyWeight, "QKV key");
             (byte[] PackedWeights, float Scale) valueWeights = ReadPackedWeights(model, layer.AttentionValueWeight, "QKV value");
             int queryOutputLength = checked((int)model.Config!.EmbeddingLength);
             int keyValueOutputLength = checked((int)model.Config.KeyValueProjectionSize);
 
-            using IMemoryOwner<sbyte> quantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(input.Length);
-            Memory<sbyte> quantizedValues = quantizedValuesOwner.Memory[..input.Length];
-            (float activationScale, _) = opProvider.QuantizeBitNetActivations(input, quantizedValues);
+            using IMemoryOwner<sbyte> quantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(inputMemory.Length);
+            Memory<sbyte> quantizedValues = quantizedValuesOwner.Memory[..inputMemory.Length];
+            RuntimeTensor quantizedTensor = RuntimeTensor.CreateWritable("RuntimeTestQKVQuantized", quantizedValues, [inputMemory.Length]);
+            (float activationScale, _) = opProvider.QuantizeBitNetActivations(input, quantizedTensor);
 
-            opProvider.ProjectBitNetI2(quantizedValues, activationScale, queryWeights.PackedWeights, queryOutputLength, queryWeights.Scale, query);
-            opProvider.ProjectBitNetI2(quantizedValues, activationScale, keyWeights.PackedWeights, keyValueOutputLength, keyWeights.Scale, key);
-            opProvider.ProjectBitNetI2(quantizedValues, activationScale, valueWeights.PackedWeights, keyValueOutputLength, valueWeights.Scale, value);
+            opProvider.ProjectBitNetI2(quantizedTensor, activationScale, RuntimeTensor.CreateReadOnly<byte>("RuntimeTestQKVQueryWeights", queryWeights.PackedWeights, [queryWeights.PackedWeights.Length]), queryOutputLength, queryWeights.Scale, query);
+            opProvider.ProjectBitNetI2(quantizedTensor, activationScale, RuntimeTensor.CreateReadOnly<byte>("RuntimeTestQKVKeyWeights", keyWeights.PackedWeights, [keyWeights.PackedWeights.Length]), keyValueOutputLength, keyWeights.Scale, key);
+            opProvider.ProjectBitNetI2(quantizedTensor, activationScale, RuntimeTensor.CreateReadOnly<byte>("RuntimeTestQKVValueWeights", valueWeights.PackedWeights, [valueWeights.PackedWeights.Length]), keyValueOutputLength, valueWeights.Scale, value);
         }
 
         private static void ExecuteAttention(global::BitNetSharp.Models.BitNetModel model, BitNetSession session, IOPProvider opProvider, global::BitNetSharp.Models.BitNetLayerDefinition layer)
@@ -166,8 +171,8 @@ namespace BitNetSharp.Tests
             ReadOnlyMemory<float> query = session.QKVQuery;
             ReadOnlyMemory<float> key = session.QKVKey;
             ReadOnlyMemory<float> value = session.QKVValue;
-            Memory<float> subNorm = session.AttentionSubNorm;
-            Memory<float> output = session.AttentionOutput;
+            RuntimeTensor subNorm = session.AttentionSubNormTensor;
+            RuntimeTensor output = session.AttentionOutputTensor;
 
             ValidateAttentionProjection(query.Span, key.Span, value.Span, embeddingLength, keyValueLength);
 
@@ -175,37 +180,51 @@ namespace BitNetSharp.Tests
             Memory<float> attentionContext = attentionContextOwner.Memory[..embeddingLength];
             BuildSingleTokenAttentionContext(opProvider, query, key, value, attentionContext, headCount, keyValueHeadCount, headDimension);
 
-            opProvider.ForwardRmsNorm(attentionContext, subNormWeights.AsMemory(0, attentionContext.Length), model.Config.AttentionLayerNormRmsEpsilon, subNorm);
-            opProvider.ProjectBitNetI2(subNorm, outputWeights.PackedWeights, embeddingLength, outputWeights.Scale, output);
-            ApplyScale(output[..embeddingLength], outputScaleValues);
-            ApplyBias(output[..embeddingLength], outputBiasValues);
+            RuntimeTensor attentionContextTensor = RuntimeTensor.CreateWritable("RuntimeTestAttentionContext", attentionContext, [embeddingLength]);
+            RuntimeTensor subNormWeightsTensor = RuntimeTensor.CreateReadOnly<float>("RuntimeTestAttentionSubNormWeights", subNormWeights.AsMemory(0, attentionContext.Length), [attentionContext.Length]);
+            opProvider.ForwardRmsNorm(attentionContextTensor, subNormWeightsTensor, model.Config.AttentionLayerNormRmsEpsilon, subNorm);
+            opProvider.ProjectBitNetI2(subNorm, RuntimeTensor.CreateReadOnly<byte>("RuntimeTestAttentionOutputWeights", outputWeights.PackedWeights, [outputWeights.PackedWeights.Length]), embeddingLength, outputWeights.Scale, output);
+            if (!output.TryGet<Memory<float>>(out Memory<float> outputMemory))
+            {
+                throw new InvalidOperationException("Runtime test output tensor does not expose writable float memory.");
+            }
+            ApplyScale(outputMemory[..embeddingLength], outputScaleValues);
+            ApplyBias(outputMemory[..embeddingLength], outputBiasValues);
         }
 
         private static void ExecuteFeedForward(global::BitNetSharp.Models.BitNetModel model, BitNetSession session, IOPProvider opProvider, global::BitNetSharp.Models.BitNetLayerDefinition layer)
         {
-            ReadOnlyMemory<float> input = session.FeedForwardNorm;
+            RuntimeTensor input = session.FeedForwardNormTensor;
+            if (!input.TryGet<ReadOnlyMemory<float>>(out ReadOnlyMemory<float> inputMemory))
+            {
+                throw new InvalidOperationException("Runtime test feed-forward input tensor does not expose float memory.");
+            }
             int embeddingLength = checked((int)model.Config!.EmbeddingLength);
             int feedForwardLength = checked((int)model.Config.FeedForwardLength);
             float[] subNormWeights = ReadFloatTensor(model, layer.FeedForwardSubNorm, "Feed-forward sub-norm");
             (byte[] PackedWeights, float Scale) gateWeights = ReadPackedWeights(model, layer.FeedForwardGateWeight, "Feed-forward gate");
             (byte[] PackedWeights, float Scale) upWeights = ReadPackedWeights(model, layer.FeedForwardUpWeight, "Feed-forward up");
             (byte[] PackedWeights, float Scale) downWeights = ReadPackedWeights(model, layer.FeedForwardDownWeight, "Feed-forward down");
-            Memory<float> subNormOutput = session.FeedForwardSubNorm;
-            Memory<float> output = session.FeedForwardOutput;
+            RuntimeTensor subNormOutput = session.FeedForwardSubNormTensor;
+            RuntimeTensor output = session.FeedForwardOutputTensor;
 
             using IMemoryOwner<float> upOwner = MemoryPool<float>.Shared.Rent(feedForwardLength);
             using IMemoryOwner<float> gateOwner = MemoryPool<float>.Shared.Rent(feedForwardLength);
-            using IMemoryOwner<sbyte> quantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(input.Length);
+            using IMemoryOwner<sbyte> quantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(inputMemory.Length);
             Memory<float> up = upOwner.Memory[..feedForwardLength];
             Memory<float> gate = gateOwner.Memory[..feedForwardLength];
-            Memory<sbyte> quantizedValues = quantizedValuesOwner.Memory[..input.Length];
-            (float activationScale, _) = opProvider.QuantizeBitNetActivations(input, quantizedValues);
+            Memory<sbyte> quantizedValues = quantizedValuesOwner.Memory[..inputMemory.Length];
+            RuntimeTensor upTensor = RuntimeTensor.CreateWritable("RuntimeTestFeedForwardUp", up, [feedForwardLength]);
+            RuntimeTensor gateTensor = RuntimeTensor.CreateWritable("RuntimeTestFeedForwardGate", gate, [feedForwardLength]);
+            RuntimeTensor quantizedTensor = RuntimeTensor.CreateWritable("RuntimeTestFeedForwardQuantized", quantizedValues, [inputMemory.Length]);
+            RuntimeTensor subNormWeightsTensor = RuntimeTensor.CreateReadOnly<float>("RuntimeTestFeedForwardSubNormWeights", subNormWeights.AsMemory(0, feedForwardLength), [feedForwardLength]);
+            (float activationScale, _) = opProvider.QuantizeBitNetActivations(input, quantizedTensor);
 
-            opProvider.ProjectBitNetI2(quantizedValues, activationScale, upWeights.PackedWeights, feedForwardLength, upWeights.Scale, up);
-            opProvider.ProjectBitNetI2(quantizedValues, activationScale, gateWeights.PackedWeights, feedForwardLength, gateWeights.Scale, gate);
+            opProvider.ProjectBitNetI2(quantizedTensor, activationScale, RuntimeTensor.CreateReadOnly<byte>("RuntimeTestFeedForwardUpWeights", upWeights.PackedWeights, [upWeights.PackedWeights.Length]), feedForwardLength, upWeights.Scale, upTensor);
+            opProvider.ProjectBitNetI2(quantizedTensor, activationScale, RuntimeTensor.CreateReadOnly<byte>("RuntimeTestFeedForwardGateWeights", gateWeights.PackedWeights, [gateWeights.PackedWeights.Length]), feedForwardLength, gateWeights.Scale, gateTensor);
             ApplySquaredReluGate(gate.Span, up.Span);
-            opProvider.ForwardRmsNorm(up, subNormWeights.AsMemory(0, feedForwardLength), model.Config.AttentionLayerNormRmsEpsilon, subNormOutput);
-            opProvider.ProjectBitNetI2(subNormOutput, downWeights.PackedWeights, embeddingLength, downWeights.Scale, output);
+            opProvider.ForwardRmsNorm(upTensor, subNormWeightsTensor, model.Config.AttentionLayerNormRmsEpsilon, subNormOutput);
+            opProvider.ProjectBitNetI2(subNormOutput, RuntimeTensor.CreateReadOnly<byte>("RuntimeTestFeedForwardDownWeights", downWeights.PackedWeights, [downWeights.PackedWeights.Length]), embeddingLength, downWeights.Scale, output);
         }
 
         private static (byte[] PackedWeights, float Scale) ReadPackedWeights(global::BitNetSharp.Models.BitNetModel model, global::BitNetSharp.Models.BitNetTensorInfo tensor, string tensorLabel)
@@ -253,8 +272,12 @@ namespace BitNetSharp.Tests
 
             int groupSize = headCount / keyValueHeadCount;
             float scoreScale = 1f / MathF.Sqrt(headDimension);
-            Span<float> attentionScore = stackalloc float[1];
-            Span<float> attentionWeight = stackalloc float[1];
+            using IMemoryOwner<float> attentionScoreOwner = MemoryPool<float>.Shared.Rent(1);
+            using IMemoryOwner<float> attentionWeightOwner = MemoryPool<float>.Shared.Rent(1);
+            Memory<float> attentionScore = attentionScoreOwner.Memory[..1];
+            Memory<float> attentionWeight = attentionWeightOwner.Memory[..1];
+            RuntimeTensor attentionScoreTensor = RuntimeTensor.CreateWritable("RuntimeTestAttentionScore", attentionScore, [1]);
+            RuntimeTensor attentionWeightTensor = RuntimeTensor.CreateWritable("RuntimeTestAttentionWeight", attentionWeight, [1]);
             for (int headIndex = 0; headIndex < headCount; headIndex++)
             {
                 int sourceHeadIndex = headIndex / groupSize;
@@ -263,12 +286,12 @@ namespace BitNetSharp.Tests
                 int sourceOffset = sourceHeadIndex * headDimension;
                 int outputOffset = headIndex * headDimension;
 
-                attentionScore[0] = ComputeScaledAttentionScore(query.Span, queryOffset, key.Span, keyOffset, headDimension, scoreScale);
-                opProvider.ForwardSoftmax(attentionScore, attentionWeight);
+                attentionScore.Span[0] = ComputeScaledAttentionScore(query.Span, queryOffset, key.Span, keyOffset, headDimension, scoreScale);
+                opProvider.ForwardSoftmax(attentionScoreTensor, attentionWeightTensor);
 
                 for (int dimensionIndex = 0; dimensionIndex < headDimension; dimensionIndex++)
                 {
-                    context.Span[outputOffset + dimensionIndex] = RoundTripThroughHalf(value.Span[sourceOffset + dimensionIndex] * attentionWeight[0]);
+                    context.Span[outputOffset + dimensionIndex] = RoundTripThroughHalf(value.Span[sourceOffset + dimensionIndex] * attentionWeight.Span[0]);
                 }
             }
         }

@@ -1,9 +1,6 @@
 using BitNetSharp.Core;
 using BitNetSharp.Models;
 using GGUFSharp;
-using System.Buffers;
-using System.Runtime.InteropServices;
-
 namespace BitNetSharp.Nodes
 {
     /// <summary>
@@ -15,7 +12,7 @@ namespace BitNetSharp.Nodes
         private readonly BitNetModel model;
         private readonly BitNetTensorInfo normTensor;
         private readonly IOPProvider opProvider;
-        private float[]? cachedNormWeights;
+        private RuntimeTensor? cachedNormWeights;
         private bool isInitialized;
 
         public RmsNormNode(BitNetModel model, BitNetTensorInfo normTensor, bool enableCache = false, Nodes.InferenceConfig? inferenceConfig = null)
@@ -71,30 +68,22 @@ namespace BitNetSharp.Nodes
                 throw new InvalidOperationException("Session does not contain embedding output.");
             }
 
-            ReadOnlyMemory<float> input = session.Embedding;
-            Memory<float> output = session.RmsNorm;
-            if (input.IsEmpty)
+            RuntimeTensor input = session.EmbeddingTensor;
+            RuntimeTensor output = session.RmsNormTensor;
+            if (!input.TryGet<ReadOnlyMemory<float>>(out ReadOnlyMemory<float> inputMemory) || inputMemory.IsEmpty)
             {
                 throw new ArgumentException("Input must not be empty.", nameof(input));
             }
 
             int expectedLength = checked((int)model.Config!.EmbeddingLength);
-            if (input.Length != expectedLength)
+            if (inputMemory.Length != expectedLength)
             {
                 throw new ArgumentException("Input length does not match the model embedding length.", nameof(input));
             }
 
-            int requiredLength = input.Length;
-            if (EnableCache)
-            {
-                opProvider.ForwardRmsNorm(input, EnsureCachedNormWeights().AsMemory(0, requiredLength), model.Config!.AttentionLayerNormRmsEpsilon, output);
-                return;
-            }
-
-            using var tensorData = model.ReadTensorData(normTensor);
-            using IMemoryOwner<float> normWeightsOwner = MemoryPool<float>.Shared.Rent(requiredLength);
-            Memory<float> normWeights = normWeightsOwner.Memory[..requiredLength];
-            FillFloatValues(tensorData.Memory.Span, normTensor.TensorType, normWeights.Span);
+            RuntimeTensor normWeights = EnableCache
+                ? EnsureCachedNormWeights()
+                : session.GetWeightTensor(normTensor.Name);
             opProvider.ForwardRmsNorm(input, normWeights, model.Config!.AttentionLayerNormRmsEpsilon, output);
         }
 
@@ -116,35 +105,9 @@ namespace BitNetSharp.Nodes
             }
         }
 
-        private float[] ReadNormWeights()
+        private RuntimeTensor EnsureCachedNormWeights()
         {
-            using var tensorData = model.ReadTensorData(normTensor);
-            return normTensor.TensorType switch
-            {
-                GGUFTensorType.GGML_TYPE_F32 => MemoryMarshal.Cast<byte, float>(tensorData.Memory.Span).ToArray(),
-                GGUFTensorType.GGML_TYPE_F16 => ConvertHalfToSingle(MemoryMarshal.Cast<byte, Half>(tensorData.Memory.Span)),
-                _ => throw new NotSupportedException($"RMSNorm tensor type '{normTensor.TensorType}' is not supported."),
-            };
-        }
-
-        private float[] EnsureCachedNormWeights()
-        {
-            return cachedNormWeights ??= ReadNormWeights();
-        }
-
-        private static void FillFloatValues(ReadOnlySpan<byte> source, GGUFTensorType tensorType, Span<float> destination)
-        {
-            switch (tensorType)
-            {
-                case GGUFTensorType.GGML_TYPE_F32:
-                    MemoryMarshal.Cast<byte, float>(source[..checked(destination.Length * sizeof(float))]).CopyTo(destination);
-                    return;
-                case GGUFTensorType.GGML_TYPE_F16:
-                    ConvertHalfBytesToSingle(source[..checked(destination.Length * sizeof(ushort))], destination);
-                    return;
-                default:
-                    throw new NotSupportedException($"RMSNorm tensor type '{tensorType}' is not supported.");
-            }
+            return cachedNormWeights ??= model.GetWeightTensor(normTensor.Name);
         }
 
         private void EnsureInitialized()
@@ -152,31 +115,6 @@ namespace BitNetSharp.Nodes
             if (!isInitialized)
             {
                 throw new InvalidOperationException("The node must be initialized by calling Init before Forward.");
-            }
-        }
-
-        private static float[] ConvertHalfToSingle(ReadOnlySpan<Half> source)
-        {
-            float[] values = new float[source.Length];
-            ConvertHalfToSingle(source, values);
-
-            return values;
-        }
-
-        private static void ConvertHalfToSingle(ReadOnlySpan<Half> source, Span<float> destination)
-        {
-            for (int index = 0; index < source.Length; index++)
-            {
-                destination[index] = (float)source[index];
-            }
-        }
-
-        private static void ConvertHalfBytesToSingle(ReadOnlySpan<byte> source, Span<float> destination)
-        {
-            ReadOnlySpan<ushort> halfBits = MemoryMarshal.Cast<byte, ushort>(source);
-            for (int index = 0; index < halfBits.Length; index++)
-            {
-                destination[index] = (float)BitConverter.UInt16BitsToHalf(halfBits[index]);
             }
         }
 

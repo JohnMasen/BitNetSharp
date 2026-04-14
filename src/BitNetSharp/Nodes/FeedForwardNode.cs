@@ -18,7 +18,7 @@ namespace BitNetSharp.Nodes
         private readonly BitNetTensorInfo upTensor;
         private readonly BitNetTensorInfo downTensor;
         private readonly IOPProvider opProvider;
-        private float[]? cachedSubNormWeights;
+        private RuntimeTensor? cachedSubNormWeights;
         private PackedProjectionWeights? cachedGateWeights;
         private PackedProjectionWeights? cachedUpWeights;
         private PackedProjectionWeights? cachedDownWeights;
@@ -98,30 +98,25 @@ namespace BitNetSharp.Nodes
                 throw new InvalidOperationException("Session does not contain feed-forward norm output.");
             }
 
-            ReadOnlyMemory<float> input = session.FeedForwardNorm;
-            Memory<float> subNorm = session.FeedForwardSubNorm;
-            Memory<float> output = session.FeedForwardOutput;
+            RuntimeTensor input = session.FeedForwardNormTensor;
+            RuntimeTensor subNorm = session.FeedForwardSubNormTensor;
+            RuntimeTensor output = session.FeedForwardOutputTensor;
             int embeddingLength = checked((int)model.Config!.EmbeddingLength);
-            if (input.Length != embeddingLength)
+            if (!input.TryGet<ReadOnlyMemory<float>>(out ReadOnlyMemory<float> inputMemory) || inputMemory.Length != embeddingLength)
             {
                 throw new ArgumentException("Input length does not match the model embedding length.", nameof(input));
             }
 
             int feedForwardLength = checked((int)model.Config.FeedForwardLength);
-            if (subNorm.Length < feedForwardLength)
+            if (!subNorm.TryGet<Memory<float>>(out Memory<float> subNormMemory) || subNormMemory.Length < feedForwardLength)
             {
                 throw new ArgumentException("Feed-forward sub-norm output length does not match the model feed-forward length.", nameof(subNorm));
             }
 
-            if (output.Length < embeddingLength)
+            if (!output.TryGet<Memory<float>>(out Memory<float> outputMemory) || outputMemory.Length < embeddingLength)
             {
                 throw new ArgumentException("Feed-forward output length does not match the model embedding length.", nameof(output));
             }
-
-            using IMemoryOwner<float> upOwner = MemoryPool<float>.Shared.Rent(feedForwardLength);
-            using IMemoryOwner<float> gateOwner = MemoryPool<float>.Shared.Rent(feedForwardLength);
-            Memory<float> up = upOwner.Memory[..feedForwardLength];
-            Memory<float> gate = gateOwner.Memory[..feedForwardLength];
 
             if (EnableCache)
             {
@@ -137,34 +132,31 @@ namespace BitNetSharp.Nodes
             PackedProjectionWeights upWeights = ParsePackedWeights(upTensorData.Memory, upTensor, "Feed-forward up");
             PackedProjectionWeights gateWeights = ParsePackedWeights(gateTensorData.Memory, gateTensor, "Feed-forward gate");
 
-            float[] subNormWeights;
-            using (IMemoryOwner<byte> subNormTensorData = model.ReadTensorData(subNormTensor))
-            {
-                subNormWeights = new float[feedForwardLength];
-                FillFloatValues(subNormTensorData.Memory.Span, subNormTensor.TensorType, subNormWeights, "Feed-forward sub-norm");
-            }
-
             using IMemoryOwner<byte> downTensorData = model.ReadTensorData(downTensor);
             PackedProjectionWeights downWeights = ParsePackedWeights(downTensorData.Memory, downTensor, "Feed-forward down");
 
-            ExecuteFeedForward(input, subNormWeights, gateWeights, upWeights, downWeights, embeddingLength, feedForwardLength, subNorm, output);
+            ExecuteFeedForward(input, session.GetWeightTensor(subNormTensor.Name), gateWeights, upWeights, downWeights, embeddingLength, feedForwardLength, subNorm, output);
         }
 
-        private void ExecuteFeedForward(ReadOnlyMemory<float> input, ReadOnlyMemory<float> subNormWeights, PackedProjectionWeights gateWeights, PackedProjectionWeights upWeights, PackedProjectionWeights downWeights, int embeddingLength, int feedForwardLength, Memory<float> subNormOutput, Memory<float> output)
+        private void ExecuteFeedForward(RuntimeTensor input, RuntimeTensor subNormWeights, PackedProjectionWeights gateWeights, PackedProjectionWeights upWeights, PackedProjectionWeights downWeights, int embeddingLength, int feedForwardLength, RuntimeTensor subNormOutput, RuntimeTensor output)
         {
             using IMemoryOwner<float> upOwner = MemoryPool<float>.Shared.Rent(feedForwardLength);
             using IMemoryOwner<float> gateOwner = MemoryPool<float>.Shared.Rent(feedForwardLength);
-            using IMemoryOwner<sbyte> quantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(input.Length);
+            ReadOnlyMemory<float> inputMemory = RuntimeTensorBufferHelper.GetReadOnlyMemory<float>(input, nameof(input));
+            using IMemoryOwner<sbyte> quantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(inputMemory.Length);
             Memory<float> up = upOwner.Memory[..feedForwardLength];
             Memory<float> gate = gateOwner.Memory[..feedForwardLength];
-            Memory<sbyte> quantizedValues = quantizedValuesOwner.Memory[..input.Length];
-            (float activationScale, _) = opProvider.QuantizeBitNetActivations(input, quantizedValues);
+            Memory<sbyte> quantizedValues = quantizedValuesOwner.Memory[..inputMemory.Length];
+            RuntimeTensor upTensor = RuntimeTensor.CreateWritable("FeedForwardUp", up, [feedForwardLength]);
+            RuntimeTensor gateTensor = RuntimeTensor.CreateWritable("FeedForwardGate", gate, [feedForwardLength]);
+            RuntimeTensor quantizedTensor = RuntimeTensor.CreateWritable("FeedForwardQuantized", quantizedValues, [inputMemory.Length]);
+            (float activationScale, _) = opProvider.QuantizeBitNetActivations(input, quantizedTensor);
 
-            opProvider.ProjectBitNetI2(quantizedValues, activationScale, upWeights.PackedWeights, feedForwardLength, upWeights.Scale, up);
-            opProvider.ProjectBitNetI2(quantizedValues, activationScale, gateWeights.PackedWeights, feedForwardLength, gateWeights.Scale, gate);
+            opProvider.ProjectBitNetI2(quantizedTensor, activationScale, CreatePackedWeightTensor(upWeights.PackedWeights, "FeedForwardUpWeights"), feedForwardLength, upWeights.Scale, upTensor);
+            opProvider.ProjectBitNetI2(quantizedTensor, activationScale, CreatePackedWeightTensor(gateWeights.PackedWeights, "FeedForwardGateWeights"), feedForwardLength, gateWeights.Scale, gateTensor);
             ApplySquaredReluGate(gate.Span, up.Span);
-            opProvider.ForwardRmsNorm(up, subNormWeights[..feedForwardLength], model.Config!.AttentionLayerNormRmsEpsilon, subNormOutput);
-            opProvider.ProjectBitNetI2(subNormOutput, downWeights.PackedWeights, embeddingLength, downWeights.Scale, output);
+            opProvider.ForwardRmsNorm(upTensor, subNormWeights, model.Config!.AttentionLayerNormRmsEpsilon, subNormOutput);
+            opProvider.ProjectBitNetI2(subNormOutput, CreatePackedWeightTensor(downWeights.PackedWeights, "FeedForwardDownWeights"), embeddingLength, downWeights.Scale, output);
         }
 
         private static void ApplySquaredReluGate(ReadOnlySpan<float> gate, Span<float> up)
@@ -211,20 +203,9 @@ namespace BitNetSharp.Nodes
             }
         }
 
-        private float[] ReadSubNormWeights()
+        private RuntimeTensor EnsureCachedSubNormWeights()
         {
-            using var tensorData = model.ReadTensorData(subNormTensor);
-            return subNormTensor.TensorType switch
-            {
-                GGUFTensorType.GGML_TYPE_F32 => MemoryMarshal.Cast<byte, float>(tensorData.Memory.Span).ToArray(),
-                GGUFTensorType.GGML_TYPE_F16 => ConvertHalfToSingle(MemoryMarshal.Cast<byte, Half>(tensorData.Memory.Span)),
-                _ => throw new NotSupportedException($"Feed-forward sub-norm tensor type '{subNormTensor.TensorType}' is not supported."),
-            };
-        }
-
-        private float[] EnsureCachedSubNormWeights()
-        {
-            return cachedSubNormWeights ??= ReadSubNormWeights();
+            return cachedSubNormWeights ??= model.GetWeightTensor(subNormTensor.Name);
         }
 
         private PackedProjectionWeights ReadPackedWeights(BitNetTensorInfo tensor, string tensorLabel)
@@ -232,6 +213,11 @@ namespace BitNetSharp.Nodes
             using var tensorData = model.ReadTensorData(tensor);
             PackedProjectionWeights weights = ParsePackedWeights(tensorData.Memory, tensor, tensorLabel);
             return new PackedProjectionWeights(weights.PackedWeights.ToArray(), weights.Scale);
+        }
+
+        private static RuntimeTensor CreatePackedWeightTensor(ReadOnlyMemory<byte> packedWeights, string name)
+        {
+            return RuntimeTensor.CreateReadOnly<byte>(name, packedWeights, [packedWeights.Length]);
         }
 
         private static PackedProjectionWeights ParsePackedWeights(ReadOnlyMemory<byte> tensorBytes, BitNetTensorInfo tensor, string tensorLabel)

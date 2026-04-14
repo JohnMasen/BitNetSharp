@@ -19,7 +19,7 @@ namespace BitNetSharp.Nodes
         private readonly BitNetTensorInfo? outputScaleTensor;
         private readonly BitNetTensorInfo? outputBiasTensor;
         private readonly IOPProvider opProvider;
-        private float[]? cachedSubNormWeights;
+        private RuntimeTensor? cachedSubNormWeights;
         private PackedProjectionWeights? cachedOutputWeights;
         private float[]? cachedOutputScaleValues;
         private float[]? cachedOutputBiasValues;
@@ -128,8 +128,8 @@ namespace BitNetSharp.Nodes
             ReadOnlyMemory<float> query = session.QKVQuery;
             ReadOnlyMemory<float> key = session.QKVKey;
             ReadOnlyMemory<float> value = session.QKVValue;
-            Memory<float> subNorm = session.AttentionSubNorm;
-            Memory<float> output = session.AttentionOutput;
+            RuntimeTensor subNorm = session.AttentionSubNormTensor;
+            RuntimeTensor output = session.AttentionOutputTensor;
             if (EnableCache)
             {
                 PackedProjectionWeights cachedOutputWeights = EnsureCachedOutputWeights();
@@ -137,13 +137,6 @@ namespace BitNetSharp.Nodes
                 ReadOnlyMemory<float> cachedOutputBiasValues = TryEnsureCachedOutputBiasValues();
                 ExecuteAttention(query, key, value, EnsureCachedSubNormWeights(), cachedOutputWeights, cachedOutputScaleValues.Span, cachedOutputBiasValues.Span, subNorm, output);
                 return;
-            }
-
-            float[] subNormWeights;
-            using (IMemoryOwner<byte> subNormTensorData = model.ReadTensorData(subNormTensor))
-            {
-                subNormWeights = new float[checked((int)model.Config!.EmbeddingLength)];
-                FillFloatValues(subNormTensorData.Memory.Span, subNormTensor.TensorType, subNormWeights, "Attention sub-norm");
             }
 
             PackedProjectionWeights outputWeights;
@@ -164,14 +157,14 @@ namespace BitNetSharp.Nodes
             if (outputBiasTensor is not null)
             {
                 using IMemoryOwner<byte> outputBiasTensorData = model.ReadTensorData(outputBiasTensor);
-                outputBiasValues = new float[output.Length];
+                outputBiasValues = new float[checked((int)model.Config!.EmbeddingLength)];
                 FillFloatValues(outputBiasTensorData.Memory.Span, outputBiasTensor.TensorType, outputBiasValues, "Attention output bias");
             }
 
-            ExecuteAttention(query, key, value, subNormWeights, outputWeights, outputScaleValues, outputBiasValues, subNorm, output);
+            ExecuteAttention(query, key, value, session.GetWeightTensor(subNormTensor.Name), outputWeights, outputScaleValues, outputBiasValues, subNorm, output);
         }
 
-        private void ExecuteAttention(ReadOnlyMemory<float> query, ReadOnlyMemory<float> key, ReadOnlyMemory<float> value, ReadOnlyMemory<float> subNormWeights, PackedProjectionWeights outputWeights, ReadOnlySpan<float> outputScaleValues, ReadOnlySpan<float> outputBiasValues, Memory<float> subNorm, Memory<float> output)
+        private void ExecuteAttention(ReadOnlyMemory<float> query, ReadOnlyMemory<float> key, ReadOnlyMemory<float> value, RuntimeTensor subNormWeights, PackedProjectionWeights outputWeights, ReadOnlySpan<float> outputScaleValues, ReadOnlySpan<float> outputBiasValues, RuntimeTensor subNorm, RuntimeTensor output)
         {
             int embeddingLength = checked((int)model.Config!.EmbeddingLength);
             int keyValueLength = checked((int)model.Config.KeyValueProjectionSize);
@@ -184,11 +177,17 @@ namespace BitNetSharp.Nodes
             using IMemoryOwner<float> attentionContextOwner = MemoryPool<float>.Shared.Rent(embeddingLength);
             Memory<float> attentionContext = attentionContextOwner.Memory[..embeddingLength];
             BuildSingleTokenAttentionContext(query, key, value, attentionContext, headCount, keyValueHeadCount, headDimension);
+            RuntimeTensor attentionContextTensor = RuntimeTensor.CreateWritable("AttentionContext", attentionContext, [embeddingLength]);
+            opProvider.ForwardRmsNorm(attentionContextTensor, subNormWeights, model.Config.AttentionLayerNormRmsEpsilon, subNorm);
+            opProvider.ProjectBitNetI2(subNorm, CreatePackedWeightTensor(outputWeights.PackedWeights, "AttentionOutputWeights"), embeddingLength, outputWeights.Scale, output);
+            Memory<float> outputMemory = RuntimeTensorBufferHelper.GetMemory<float>(output, nameof(output));
+            ApplyScale(outputMemory[..embeddingLength], outputScaleValues);
+            ApplyBias(outputMemory[..embeddingLength], outputBiasValues);
+        }
 
-            opProvider.ForwardRmsNorm(attentionContext, subNormWeights[..attentionContext.Length], model.Config.AttentionLayerNormRmsEpsilon, subNorm);
-            opProvider.ProjectBitNetI2(subNorm, outputWeights.PackedWeights, embeddingLength, outputWeights.Scale, output);
-            ApplyScale(output[..embeddingLength], outputScaleValues);
-            ApplyBias(output[..embeddingLength], outputBiasValues);
+        private static RuntimeTensor CreatePackedWeightTensor(ReadOnlyMemory<byte> packedWeights, string name)
+        {
+            return RuntimeTensor.CreateReadOnly<byte>(name, packedWeights, [packedWeights.Length]);
         }
 
         private void ValidateOutputScaleTensor()
@@ -244,8 +243,12 @@ namespace BitNetSharp.Nodes
 
             int groupSize = headCount / keyValueHeadCount;
             float scoreScale = 1f / MathF.Sqrt(headDimension);
-            Span<float> attentionScore = stackalloc float[1];
-            Span<float> attentionWeight = stackalloc float[1];
+            using IMemoryOwner<float> attentionScoreOwner = MemoryPool<float>.Shared.Rent(1);
+            using IMemoryOwner<float> attentionWeightOwner = MemoryPool<float>.Shared.Rent(1);
+            Memory<float> attentionScore = attentionScoreOwner.Memory[..1];
+            Memory<float> attentionWeight = attentionWeightOwner.Memory[..1];
+            RuntimeTensor attentionScoreTensor = RuntimeTensor.CreateWritable("AttentionScore", attentionScore, [1]);
+            RuntimeTensor attentionWeightTensor = RuntimeTensor.CreateWritable("AttentionWeight", attentionWeight, [1]);
             for (int headIndex = 0; headIndex < headCount; headIndex++)
             {
                 int sourceHeadIndex = headIndex / groupSize;
@@ -254,12 +257,12 @@ namespace BitNetSharp.Nodes
                 int sourceOffset = sourceHeadIndex * headDimension;
                 int outputOffset = headIndex * headDimension;
 
-                attentionScore[0] = ComputeScaledAttentionScore(query.Span, queryOffset, key.Span, keyOffset, headDimension, scoreScale);
-                opProvider.ForwardSoftmax(attentionScore, attentionWeight);
+                attentionScore.Span[0] = ComputeScaledAttentionScore(query.Span, queryOffset, key.Span, keyOffset, headDimension, scoreScale);
+                opProvider.ForwardSoftmax(attentionScoreTensor, attentionWeightTensor);
 
                 for (int dimensionIndex = 0; dimensionIndex < headDimension; dimensionIndex++)
                 {
-                    context.Span[outputOffset + dimensionIndex] = RoundTripThroughHalf(value.Span[sourceOffset + dimensionIndex] * attentionWeight[0]);
+                    context.Span[outputOffset + dimensionIndex] = RoundTripThroughHalf(value.Span[sourceOffset + dimensionIndex] * attentionWeight.Span[0]);
                 }
             }
         }
@@ -358,20 +361,9 @@ namespace BitNetSharp.Nodes
             }
         }
 
-        private float[] ReadSubNormWeights()
+        private RuntimeTensor EnsureCachedSubNormWeights()
         {
-            using var tensorData = model.ReadTensorData(subNormTensor);
-            return subNormTensor.TensorType switch
-            {
-                GGUFTensorType.GGML_TYPE_F32 => MemoryMarshal.Cast<byte, float>(tensorData.Memory.Span).ToArray(),
-                GGUFTensorType.GGML_TYPE_F16 => ConvertHalfToSingle(MemoryMarshal.Cast<byte, Half>(tensorData.Memory.Span)),
-                _ => throw new NotSupportedException($"Attention sub-norm tensor type '{subNormTensor.TensorType}' is not supported."),
-            };
-        }
-
-        private float[] EnsureCachedSubNormWeights()
-        {
-            return cachedSubNormWeights ??= ReadSubNormWeights();
+            return cachedSubNormWeights ??= model.GetWeightTensor(subNormTensor.Name);
         }
 
         private ReadOnlyMemory<float> TryEnsureCachedOutputScaleValues()
