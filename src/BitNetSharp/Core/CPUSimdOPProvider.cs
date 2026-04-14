@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Numerics;
+using System.Numerics.Tensors;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
@@ -320,31 +321,12 @@ namespace BitNetSharp.Core
 
         private static float ComputeLmHeadDotSimd(ReadOnlySpan<float> input, ReadOnlySpan<Half> weights)
         {
-            //TODO：need to improve batch half to float converter
-            int simdWidth = Vector<float>.Count;
-            int vectorizedLength = input.Length - (input.Length % simdWidth);
-            Vector<float> sumVector = Vector<float>.Zero;
-            Span<float> weightBuffer = stackalloc float[Vector<float>.Count];
-
-            for (int index = 0; index < vectorizedLength; index += simdWidth)
-            {
-                for (int weightIndex = 0; weightIndex < simdWidth; weightIndex++)
-                {
-                    weightBuffer[weightIndex] = (float)weights[index + weightIndex];
-                }
-
-                Vector<float> inputVector = new(input.Slice(index, simdWidth));
-                Vector<float> weightVector = new(weightBuffer);
-                sumVector += inputVector * weightVector;
-            }
-
-            float sum = Vector.Dot(sumVector, Vector<float>.One);
-            for (int index = vectorizedLength; index < input.Length; index++)
-            {
-                sum += input[index] * (float)weights[index];
-            }
-
+            //use tensor conver to enable hardware-acclerated convert, the only way to use FP16C
+            Span<float> weights_float = stackalloc float[weights.Length];
+            TensorPrimitives.ConvertToSingle(weights, weights_float);
+            float sum = TensorPrimitives.Dot(input, weights_float);
             return sum;
+            
         }
 
         internal static (float ActivationScale, int ActivationSum) QuantizeBitNetActivations(ReadOnlyMemory<float> input, Memory<sbyte> quantizedValues, int threadCount)
