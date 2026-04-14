@@ -136,7 +136,7 @@ namespace BitNetSharp
             get => GetOrCreateFloatMemory(AttentionOutputKey, GetEmbeddingLength());
             set => SetMemory(AttentionOutputKey, value);
         }
-
+        //TODO:hot path, do not need to check if contains key
         public Memory<float> FeedForwardInput => GetOrCreateFloatMemory(FeedForwardInputKey, GetEmbeddingLength());
 
         public Memory<float> FeedForwardNorm => GetOrCreateFloatMemory(FeedForwardNormKey, GetEmbeddingLength());

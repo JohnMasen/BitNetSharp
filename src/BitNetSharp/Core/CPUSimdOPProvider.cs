@@ -320,6 +320,7 @@ namespace BitNetSharp.Core
 
         private static float ComputeLmHeadDotSimd(ReadOnlySpan<float> input, ReadOnlySpan<Half> weights)
         {
+            //TODO：need to improve batch half to float converter
             int simdWidth = Vector<float>.Count;
             int vectorizedLength = input.Length - (input.Length % simdWidth);
             Vector<float> sumVector = Vector<float>.Zero;

@@ -7,7 +7,7 @@ namespace BitNetSharp.Core
     {
         private const int GroupMultiplier = 2;
 
-        internal static int DefaultGroupCount => Math.Max(1, Environment.ProcessorCount * GroupMultiplier);
+        internal static int DefaultGroupCount { get; }= Environment.ProcessorCount * GroupMultiplier;
 
         internal static void ForEachRange(int itemCount, Action<int, int> rangeAction, int threadCount = 0, int itemByteLength = 1, int? alignmentByteLength = null)
         {

@@ -1,4 +1,5 @@
 using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Order;
 using BitNetSharp;
 using BitNetSharp.Models;
@@ -10,6 +11,8 @@ using System.Runtime.Intrinsics.X86;
 namespace BitNetSharp.Benchmarks;
 [HideColumns("Error", "StdDev", "Median", "RatioSD")]
 [Orderer(SummaryOrderPolicy.FastestToSlowest)]
+[SimpleJob(RuntimeMoniker.Net90)]
+[SimpleJob(RuntimeMoniker.Net10_0)]
 [CPUUsageDiagnoser]
 public class BitNetRuntimeInferenceBenchmarks
 {
