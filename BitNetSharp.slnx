@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/BitNetSharp.Console/BitNetSharp.Console.csproj" />
     <Project Path="src/BitNetSharp/BitNetSharp.csproj" />
   </Folder>
   <Folder Name="/tests/">

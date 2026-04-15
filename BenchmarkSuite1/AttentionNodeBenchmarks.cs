@@ -29,11 +29,7 @@ public class AttentionNodeBenchmarks
         model = new BitNetModel();
         model.Load(BenchmarkProjectPaths.ModelPath);
         var layerDefinition = model.GetLayer(0);
-        session = new BitNetSession(model, memoryManager)
-        {
-            Tokens = new[] { 0 },
-            CurrentToken = 0,
-        };
+        session = new BitNetSession(model, memoryManager, new[] { 0 });
         BenchmarkDataHelper.FillDeterministicValues(session.QKVQuery.Span, 23);
         BenchmarkDataHelper.FillDeterministicValues(session.QKVKey.Span, 29);
         BenchmarkDataHelper.FillDeterministicValues(session.QKVValue.Span, 31);

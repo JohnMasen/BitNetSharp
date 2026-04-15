@@ -22,8 +22,11 @@
 | 组件 | 当前状态 | 是否有测试数据 | 说明 |
 |---|---|---|---|
 | `SamplingNode` / next-token 选择 | 已实现 | 是 | 已覆盖 greedy `argmax`、`top-k`、`next_token_id` baseline |
-| 单 token 端到端 runtime 编排 | 已实现（仅测试用途） | 是 | `BitNetRuntime` 已接起当前单 token 完整推理链路，但该入口仅用于链路验证，后续会连同测试一起删除 |
+| 单 token 端到端 runtime 编排 | 已实现（过渡版） | 是 | `BitNetRuntime` 已接起当前端到端链路，并新增 `Prefill` / `ContinuePrefill` 与连续生成入口；runtime 路径现已按层写入并读取 `KV cache` 参与 attention，但当前仍是运行时内联编排的过渡实现，尚未下沉为正式 graph/runtime 结构 |
+| 文本对话 runtime / console 入口 | 已实现（增强版） | 是 | 已新增基于 GGUF/chat runtime 行为对齐的最小 user/assistant 文本对话入口，可通过 `StartConversation` / `ContinueConversation` / `GenerateAssistantReply` / `StreamAssistantReply` / `StreamAssistantReplyWithTokenIds` 驱动会话，并提供 `BitNetSharp.Console` 控制台项目；当前控制台已支持 `--max-new-tokens`、`--top-k`、`--temperature`、`--top-p`、`--min-p`、`--prompt`、`--show-token-ids`、模型信息输出、流式 token 输出、Ctrl+C 中断生成，以及显式启用的可选采样调试 |
+| Console 内存统计与 CSV 导出 | 已实现（第一版） | 是 | `BitNetSharp.Console` 已支持 `--show-memory` 与 `--memory-csv`，可显示 `MemoryManager` 跟踪片段总览，并在外围推导 `Actual KV Cache` / `Allocated KV Cache` 后导出 CSV 明细 |
 | `RuntimeTensor` / Session 张量访问入口 | 已实现（第一版） | 是 | 已引入非泛型 `RuntimeTensor`，并新增 `GetWeightTensor(string)` 与 `GetOrCreateRuntimeTensor(string)`；权重 tensor 由 `BitNetModel` 共享缓存，runtime tensor 由 `BitNetSession` 私有创建 |
+| `BitNetSession` 多轮输出状态 / `KV cache` 容器 | 已实现（第一版） | 是 | 已支持 append-only token 历史、输出轮次跟踪、当前轮输出视图，以及按层 `K/V cache` tensor 容器；当前 `KV cache` 继续使用按层 key 前缀区分的静态分配存储，并已接入 runtime 过渡链路 |
 | `IOPProvider` RuntimeTensor 迁移 | 已实现（第一版） | 是 | `IOPProvider` 的主要张量输入输出已从 `Memory<T>` / `Span<T>` 迁移到 `RuntimeTensor`；CPU / Tensor / SIMD provider、主要 node、以及运行时过渡编排路径已同步切换 |
 
 ## Summary
@@ -60,3 +63,14 @@
 - `OPProviderBackendNames` 也已从主代码移除；provider 自身直接声明 backend 字符串，测试侧固定标识改收敛到测试辅助，避免主代码继续暴露固定 provider 集合假设
 - 已引入第一版 `RuntimeTensor`：`BitNetSession` 可通过 `GetWeightTensor(string)` 获取模型级共享只读权重 tensor，并通过 `GetOrCreateRuntimeTensor(string)` 获取会话私有 runtime tensor；现有会话缓冲区属性已改为基于 `RuntimeTensor` 的统一创建与访问
 - `IOPProvider` 的主要张量边界也已迁移到 `RuntimeTensor`；`ForwardSoftmax` 也已从 `Span` 公开签名切到 `RuntimeTensor`。当前 provider 内部仍解析回 `Memory/Span` 以复用现有 CPU/Tensor/SIMD 实现，但 node/runtime/测试辅助层已不再直接把 `Memory<T>` 或 `Span<T>` 作为 OP API 传递对象
+- `BitNetSession` 已补上多轮输出状态层第一版：现支持 append-only token 历史、输出轮次跟踪、当前轮输出切片视图、以及按层 `K/V cache` tensor 容器；单个 `session` 不再允许通过公开 API 重置历史，重新开始生成需要创建新 `session`
+- `BitNetRuntime` 已补上 `Prefill` / `ContinuePrefill` 与连续生成入口；当前 runtime 过渡链路现已在 QKV 阶段按层写入 `K/V cache`，并在 attention 阶段读取历史 `KV cache` 参与上下文计算，使历史 token 开始真正参与 runtime 推理
+- 已补上最小文本对话路径：`BitNetTokenizer` 现支持当前 GGUF 模板下的 user/assistant 聊天编码，`BitNetRuntime` 新增 `StartConversation` / `ContinueConversation` / `GenerateAssistantReply`，并已创建 `BitNetSharp.Console` 作为最小交互式对话程序入口
+- `BitNetRuntime` 已新增带 `CancellationToken` 的流式回复路径 `StreamAssistantReply`，控制台程序现按 token 即时打印 assistant 输出，并把 Ctrl+C 直接接到当前生成的取消逻辑，避免只能在整轮生成结束后才退出
+- `SamplingNode` 当前已向 llama.cpp 默认采样链做最小对齐：同一轮生成共享随机源，并新增 `temperature` / `top-p` / `min-p`；`BitNetRuntime` / `BitNetSharp.Console` 也已暴露这些参数，同时保留显式启用采样的入口，避免破坏现有 greedy baseline 测试
+- `BitNetMemoryManager` 已恢复为 `id + key` 模型；当前不再保留 `slot` 维度，按层 `KV cache` 继续通过 key 前缀编码层号，避免额外的字典查找开销
+- 关于移除 `slot` 并保留静态 `KV cache` 分配的设计说明，已补充到 `doc/archdesign/MemoryManager-KVCache-Design.md`
+- `BitNetMemoryManager` 已补上只读统计快照 `GetStatistics()`；控制台可选择显示已跟踪内存片段总览，并额外在外围推导 `Actual KV Cache` 与 `Allocated KV Cache`。同时支持导出 CSV，便于后续用透视表分析
+- 聊天 prompt 已开始按 dump 出的 BitNet 运行时行为对齐：当前 user 轮改为 `User: <content><|eot_id|>Assistant: `，assistant 轮结束优先使用 `EOT` 分隔 token 结束，而不是继续固定使用 `Human/BITNETAssistant + EOS`
+- 为便于定位不可见字符与采样异常，控制台已新增 `--show-token-ids` 调试开关，可将每个生成 token 以 `文本[tokenId]` 形式打印出来
+- `BitNetRuntime` 已新增 `Prefill` 与 `ContinuePrefill`：现在可先用 prompt token 建立 active session，再衔接后续 `GenerateTokenIds(count)`；当前 `Prefill` 仍是逐 token 复用现有单 token 推理链路，尚未让 attention 真正读取历史 `KV cache`

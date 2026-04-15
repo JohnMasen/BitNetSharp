@@ -53,6 +53,42 @@ namespace BitNetSharp.Tests
             Assert.AreEqual(reconstructedText, GetTokenizer().Decode(tokenIds), caseName);
         }
 
+        [TestMethod]
+        public void EncodeChatMessageToIds_User_FirstMessage_MatchesRuntimePromptShape()
+        {
+            var tokenizer = GetTokenizer();
+
+            int[] tokenIds = tokenizer.EncodeChatMessageToIds(Models.BitNetChatRole.User, "hi", isFirstMessage: true).ToArray();
+
+            CollectionAssert.AreEqual(new[] { 128000, 1502, 25, 15960, 128009, 72803, 25, 220 }, tokenIds);
+        }
+
+        [TestMethod]
+        public void EncodeChatMessageToIds_Assistant_AppendsConversationDelimiter()
+        {
+            var tokenizer = GetTokenizer();
+
+            int[] tokenIds = tokenizer.EncodeChatMessageToIds(Models.BitNetChatRole.Assistant, "world", isFirstMessage: false).ToArray();
+
+            Assert.AreEqual(128009, tokenIds[^1]);
+        }
+
+        [TestMethod]
+        [DataRow("hi", true, new[] { 128000, 6151 })]
+        [DataRow(" hi", true, new[] { 128000, 15960 })]
+        [DataRow("Assistant: ", true, new[] { 128000, 72803, 25, 220 })]
+        [DataRow("<|eot_id|>", true, new[] { 128000, 128009 })]
+        [DataRow("User: hi<|eot_id|>Assistant: ", true, new[] { 128000, 1502, 25, 15960, 128009, 72803, 25, 220 })]
+        [DataRow("Hello! How can I assist you today?", true, new[] { 128000, 9906, 0, 2650, 649, 358, 7945, 499, 3432, 30 })]
+        public void EncodeToIds_MatchesDumpAgentBaseline(string text, bool addBos, int[] expectedTokenIds)
+        {
+            var tokenizer = GetTokenizer();
+
+            int[] actualTokenIds = tokenizer.EncodeToIds(text, addBos: addBos).ToArray();
+
+            CollectionAssert.AreEqual(expectedTokenIds, actualTokenIds, text);
+        }
+
         public static IEnumerable<object[]> GetEncodingCases()
         {
             return StandardTokensDocumentCache.Value.TestCases.Take(1).Select(testCase => new object[]

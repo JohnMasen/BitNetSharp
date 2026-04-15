@@ -182,7 +182,7 @@ namespace BitNetSharp.Tests
 
         private static void AssertFloatArraysAreClose(IReadOnlyList<float> expected, IReadOnlyList<float> actual, float delta, string caseName)
         {
-            Assert.AreEqual(expected.Count, actual.Count, caseName);
+            Assert.HasCount(expected.Count, actual, caseName);
             for (int index = 0; index < expected.Count; index++)
             {
                 if (MathF.Abs(expected[index] - actual[index]) > delta)

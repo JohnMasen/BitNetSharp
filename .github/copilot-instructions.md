@@ -12,7 +12,7 @@
 - Eliminate `InferenceContext` and migrate its contents into `BitNetSession`, avoiding separate runtime-context abstractions for this area of the repo.
 - For layers in this repo, `Forward` must not be allowed before an explicit `Init` call. `Init` performs internal initialization, currently only eager cache loading.
 - For this repo's transformer pipeline, the attention layer input should be the QKV projection output, not the RMSNorm output directly.
-- For session state in this repo, do not construct `BitNetMemoryManager` inside `BitNetSession`; pass it in during construction so tests can instantiate a shared manager for current development and future code can use unified memory management. **Benchmark code should reuse `BitNetMemoryManager` instead of creating many managers, because the manager is designed for reuse and excess instances add unnecessary memory pressure.**
+- For session state in this repo, do not construct `BitNetMemoryManager` inside `BitNetSession`; pass it in during construction so tests can instantiate a shared manager for current development and future code can use unified memory management. **Benchmark code should reuse `BitNetMemoryManager` instead of creating many managers, because the manager is designed for reuse and excess instances add unnecessary memory pressure.** The user prefers to first enable index-based access in `BitNetMemoryManager` (id, key, [index], default index=0) to better support KV cache layered/segmented writes.
 - For BitNetSession output state in this repo, expose lazy-initialized get-only buffer properties and write into them in place instead of using session buffer request APIs or setter-based copies.
 - Simple scalar values such as `CurrentToken` should be ordinary properties and not be managed by `BitNetMemoryManager`, which should be reserved for large memory blocks.
 - Defer implementing true multi-token KV-cache/runtime work in this repo until after the single-token inference pipeline is fully working end-to-end.
@@ -52,6 +52,7 @@
 - For architecture discussion summaries, write them under the `doc/archdesign` path as markdown documents.
 - For this repo's runtime design, `RuntimeTensor` should support copying data in from `Memory<T>` for CPU-origin initialization. The user prefers `Session` to create tensors via its internal `MemoryManager`, while multiple sessions should share a single immutable weight copy instead of duplicating model weights per session.
 - Defer optimization work for the current RuntimeTensor/IOPProvider performance regression for now; revisit later with architecture simplification aimed at reducing lookup overhead such as extra list/dictionary access.
+- **In this repo, retain the current static allocation strategy for token/KV cache; do not alter the overall architecture for dynamic expansion on CPU, as future GPU/NPU devices may not support dynamic memory expansion.**
 
 ## QKV Parallel Work Instructions
 - For QKV parallel work, `ThreadHelper` should support optional block-aligned splitting. Default splitting should not enforce alignment; only SIMD callers should pass an alignment parameter based on the required data byte length.
@@ -66,6 +67,8 @@
 - Use class-level test initialization to load the GGUF model once, reuse it across tests in the class, and release it in class cleanup.
 - Load the GGUF model in shared test initialization and ensure proper release after the test scope ends.
 - Use shorter, clearer test names that are easy to scan at a glance.
+- In this repo, tokenizer-related test data should be based on the authoritative source results provided by the dump agent. **When requesting data from the dump agent, only list the required data without explaining the purpose or background.**
+- For subsequent hi tests in this repo, set max tokens to 32 to save time.
 
 ## Layer Testing Instructions
 - Keep `EmbeddingLayer` tests in a separate `LayerTests.cs` file.
@@ -87,6 +90,9 @@
 ## CSV Output Instructions
 - When the user asks for CSV output, preserve actual line breaks clearly, preferably in a fenced CSV block to avoid collapsing into one line.
 
+## Console Performance Output Instructions
+- In this repo, Console performance statistics output should not use Markdown tables; use fixed-width space-aligned plain text tables instead.
+
 ## Communication Preferences
 - Follow-up communication for this repo discussion should be conducted in Chinese.
 
@@ -95,3 +101,9 @@
 
 ## Future Runtime Design Considerations
 - Consider an assembly approach that converts graph node calls into an action list so actions can access concrete memory objects directly; this is only a recorded direction for later research, not current implementation work.
+
+## CPUSimdOPProvider Instructions
+- For `CPUSimdOPProvider`, capability checks like AVX2 support should be performed once in the constructor rather than per method, because SIMD is required for the provider to function correctly.
+
+## Session Management Instructions
+- In this repo, a new `BitNetSession` must be created for each session; a single session cannot be rolled back, reset, or modify history, and only forward state additions are allowed.

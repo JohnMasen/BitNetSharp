@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+		<DefaultTargetFramework>net10.0</DefaultTargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<RootNamespace>BitNetSharp.Console</RootNamespace>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\BitNetSharp\BitNetSharp.csproj" />
+	</ItemGroup>
+
+</Project>

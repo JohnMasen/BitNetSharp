@@ -32,11 +32,7 @@ public class QKVProjectionNodeBenchmarks
         model.Load(BenchmarkProjectPaths.ModelPath);
 
         var layerDefinition = model.GetLayer(0);
-        session = new BitNetSession(model, memoryManager)
-        {
-            Tokens = new[] { 0 },
-            CurrentToken = 0,
-        };
+        session = new BitNetSession(model, memoryManager, new[] { 0 });
         BenchmarkDataHelper.FillDeterministicValues(session.RmsNorm.Span, 3);
 
         cpuSingleThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Cpu(1));

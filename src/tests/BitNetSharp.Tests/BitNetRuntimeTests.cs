@@ -60,11 +60,7 @@ namespace BitNetSharp.Tests
         private static string RunManualInference(global::BitNetSharp.Models.BitNetModel model, int tokenId, global::BitNetSharp.Nodes.InferenceConfig inferenceConfig)
         {
             using var memoryManager = new BitNetMemoryManager();
-            using var session = new BitNetSession(model, memoryManager)
-            {
-                Tokens = new[] { tokenId },
-                CurrentToken = tokenId,
-            };
+            using var session = new BitNetSession(model, memoryManager, new[] { tokenId });
 
             var embeddingNode = new global::BitNetSharp.Nodes.EmbeddingNode(model, enableCache: true, inferenceConfig: TestInferenceConfigs.Cpu(1));
             IOPProvider opProvider = CreateOpProvider(inferenceConfig);

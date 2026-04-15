@@ -19,13 +19,49 @@ namespace BitNetSharp.Tests
         {
             var step = new BitNetSharp.Nodes.SamplingNode();
 
-            Assert.AreEqual(10, step.TopK);
+            Assert.AreEqual(40, step.TopK);
+            Assert.IsFalse(step.EnableSampling);
+            Assert.AreEqual(0.80f, step.Temperature, 1e-6f);
+            Assert.AreEqual(0.95f, step.TopP, 1e-6f);
+            Assert.AreEqual(0.05f, step.MinP, 1e-6f);
+            Assert.AreEqual(64, step.RepeatLastN);
+            Assert.AreEqual(1.00f, step.RepeatPenalty, 1e-6f);
         }
 
         [TestMethod]
         public void SamplingNode_InvalidTopK_Throws()
         {
             Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new BitNetSharp.Nodes.SamplingNode(0));
+        }
+
+        [TestMethod]
+        public void SamplingNode_InvalidTemperature_Throws()
+        {
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new BitNetSharp.Nodes.SamplingNode(temperature: -0.1f));
+        }
+
+        [TestMethod]
+        public void SamplingNode_InvalidTopP_Throws()
+        {
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new BitNetSharp.Nodes.SamplingNode(topP: 0f));
+        }
+
+        [TestMethod]
+        public void SamplingNode_InvalidMinP_Throws()
+        {
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new BitNetSharp.Nodes.SamplingNode(minP: 1.1f));
+        }
+
+        [TestMethod]
+        public void SamplingNode_InvalidRepeatLastN_Throws()
+        {
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new BitNetSharp.Nodes.SamplingNode(repeatLastN: -1));
+        }
+
+        [TestMethod]
+        public void SamplingNode_InvalidRepeatPenalty_Throws()
+        {
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new BitNetSharp.Nodes.SamplingNode(repeatPenalty: 0f));
         }
 
         [TestMethod]
@@ -45,6 +81,67 @@ namespace BitNetSharp.Tests
             testCase.LmHead.Logits.CopyTo(session.Logits.Span);
 
             Assert.ThrowsExactly<InvalidOperationException>(() => step.Forward(session));
+        }
+
+        [TestMethod]
+        public void SamplingNode_WithSamplingEnabled_SelectsTokenWithinTopK()
+        {
+            using var model = TestModelFactory.LoadModel();
+            var step = new BitNetSharp.Nodes.SamplingNode(topK: 3, enableSampling: true, randomSeed: 123);
+            var session = TestModelFactory.CreateSession(model, token: 0);
+            session.Logits.Span.Fill(float.NegativeInfinity);
+            session.Logits.Span[0] = 1f;
+            session.Logits.Span[1] = 5f;
+            session.Logits.Span[2] = 4f;
+            session.Logits.Span[3] = 3f;
+
+            step.Init();
+            step.Forward(session);
+
+            CollectionAssert.AreEqual(new[] { 1, 2, 3 }, session.TopKTokenIds);
+            CollectionAssert.Contains(session.TopKTokenIds, session.NextTokenId);
+            Assert.AreEqual("top_k_sampling", session.NextTokenStrategy);
+        }
+
+        [TestMethod]
+        public void SamplingNode_WithFixedSeed_UsesStableSequenceAcrossForwardCalls()
+        {
+            using var model = TestModelFactory.LoadModel();
+            var step = new BitNetSharp.Nodes.SamplingNode(topK: 3, enableSampling: true, randomSeed: 123, temperature: 0.8f, topP: 0.95f, minP: 0f);
+            var firstSession = TestModelFactory.CreateSession(model, token: 0);
+            var secondSession = TestModelFactory.CreateSession(model, token: 0);
+            firstSession.Logits.Span.Fill(float.NegativeInfinity);
+            secondSession.Logits.Span.Fill(float.NegativeInfinity);
+            for (int index = 0; index < 3; index++)
+            {
+                firstSession.Logits.Span[index] = 3 - index;
+                secondSession.Logits.Span[index] = 3 - index;
+            }
+
+            step.Init();
+            step.Forward(firstSession);
+            int firstToken = firstSession.NextTokenId;
+            step.Forward(secondSession);
+            int secondToken = secondSession.NextTokenId;
+
+            Assert.AreNotEqual(firstToken, secondToken);
+        }
+
+        [TestMethod]
+        public void SamplingNode_WithRepeatPenalty_PenalizesRecentToken()
+        {
+            using var model = TestModelFactory.LoadModel();
+            using var session = TestModelFactory.CreateSession(model, token: 1);
+            session.AppendToken(1);
+            session.Logits.Span.Fill(float.NegativeInfinity);
+            session.Logits.Span[1] = 5f;
+            session.Logits.Span[2] = 4.9f;
+            var step = new BitNetSharp.Nodes.SamplingNode(topK: 2, enableSampling: false, repeatLastN: 64, repeatPenalty: 2.0f);
+
+            step.Init();
+            step.Forward(session);
+
+            Assert.AreEqual(2, session.NextTokenId);
         }
 
         public static IEnumerable<object[]> GetSamplingCaseIndices()
@@ -88,7 +185,7 @@ namespace BitNetSharp.Tests
 
         private static void AssertFloatArraysAreClose(IReadOnlyList<float> expected, IReadOnlyList<float> actual, float delta, string caseName)
         {
-            Assert.AreEqual(expected.Count, actual.Count, caseName);
+            Assert.HasCount(expected.Count, actual, caseName);
             for (int index = 0; index < expected.Count; index++)
             {
                 Assert.AreEqual(expected[index], actual[index], delta, $"{caseName} mismatch at index {index}.");

@@ -23,11 +23,7 @@ namespace BitNetSharp.Tests
         {
             ArgumentNullException.ThrowIfNull(model);
 
-            return new BitNetSession(model, SharedMemoryManager)
-            {
-                Tokens = new[] { token },
-                CurrentToken = token,
-            };
+            return new BitNetSession(model, SharedMemoryManager, new[] { token });
         }
     }
 }

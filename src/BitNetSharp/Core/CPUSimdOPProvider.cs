@@ -22,6 +22,11 @@ namespace BitNetSharp.Core
                 throw new ArgumentOutOfRangeException(nameof(threadCount));
             }
 
+            if (!Avx2.IsSupported)
+            {
+                throw new NotSupportedException("CPUSimdOPProvider requires AVX2 support.");
+            }
+
             ThreadCount = threadCount;
         }
 
@@ -46,7 +51,6 @@ namespace BitNetSharp.Core
             ReadOnlySpan<float> addendSpan = addendMemory.Span;
             Span<float> outputSpan = outputMemory.Span;
             ValidationHelper.ValidateAddDestination(inputSpan, addendSpan, outputSpan);
-            EnsureAddSupported();
 
             if (ThreadCount == 1 || inputMemory.Length <= Vector256<float>.Count)
             {
@@ -67,7 +71,6 @@ namespace BitNetSharp.Core
             ReadOnlyMemory<byte> packedWeightsMemory = packedWeights.GetReadOnlyMemory<byte>();
             Memory<float> outputMemory = output.GetMemory<float>();
             ValidationHelper.ValidateBitNetProjectionArguments(inputMemory.Span, packedWeightsMemory.Span, outputLength);
-            EnsureBitNetProjectionSupported();
             ValidationHelper.ValidateProjectionDestination(outputLength, outputMemory.Span);
 
             using IMemoryOwner<sbyte> quantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(inputMemory.Length);
@@ -83,7 +86,6 @@ namespace BitNetSharp.Core
             ReadOnlyMemory<byte> packedWeightsMemory = packedWeights.GetReadOnlyMemory<byte>();
             Memory<float> outputMemory = output.GetMemory<float>();
             ValidationHelper.ValidateBitNetProjectionArguments(quantizedValuesMemory.Span, packedWeightsMemory.Span, outputLength);
-            EnsureBitNetProjectionSupported();
             Span<float> outputSpan = outputMemory.Span;
             ValidationHelper.ValidateProjectionDestination(outputLength, outputSpan);
 
@@ -113,7 +115,6 @@ namespace BitNetSharp.Core
             ReadOnlySpan<float> inputSpan = inputMemory.Span;
             Span<float> outputSpan = outputMemory.Span;
             ValidationHelper.ValidateSoftmaxDestination(inputSpan, outputSpan);
-            EnsureSoftmaxSupported();
 
             if (ThreadCount == 1 || inputMemory.Length <= 1)
             {
@@ -180,7 +181,6 @@ namespace BitNetSharp.Core
             ReadOnlySpan<float> inputSpan = input.Span;
             Span<float> outputSpan = output.Span;
             ValidationHelper.ValidateSoftmaxDestination(inputSpan, outputSpan);
-            EnsureSoftmaxSupported();
 
             if (ThreadCount == 1 || input.Length <= 1)
             {
@@ -579,36 +579,8 @@ namespace BitNetSharp.Core
             return activationSum;
         }
 
-        private static void EnsureBitNetProjectionSupported()
-        {
-            if (!Avx.IsSupported || !Avx2.IsSupported)
-            {
-                throw new NotSupportedException("BitNet SIMD projection requires AVX2 support.");
-            }
-        }
-
-        private static void EnsureAddSupported()
-        {
-            if (!Avx.IsSupported)
-            {
-                throw new NotSupportedException("Residual SIMD implementation requires AVX support.");
-            }
-        }
-
-        private static void EnsureSoftmaxSupported()
-        {
-            if (!Avx.IsSupported || !Avx2.IsSupported)
-            {
-                throw new NotSupportedException("Softmax SIMD implementation requires AVX2 support.");
-            }
-        }
-
         private static void EnsureRmsNormSupported(int inputLength)
         {
-            if (!Avx.IsSupported || !Avx2.IsSupported)
-            {
-                throw new NotSupportedException("RMSNorm SIMD implementation requires AVX2 support.");
-            }
 
             if (inputLength % Vector256<float>.Count != 0)
             {

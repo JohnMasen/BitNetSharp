@@ -29,11 +29,7 @@ public class RmsNormNodeBenchmarks
         model = new BitNetModel();
         model.Load(BenchmarkProjectPaths.ModelPath);
         var normTensor = model.GetLayer(0).AttentionNorm;
-        session = new BitNetSession(model, memoryManager)
-        {
-            Tokens = new[] { 0 },
-            CurrentToken = 0,
-        };
+        session = new BitNetSession(model, memoryManager, new[] { 0 });
         BenchmarkDataHelper.FillDeterministicValues(session.Embedding.Span, 2);
         cpuSingleThreadNode = new RmsNormNode(
             model,

@@ -7,6 +7,10 @@ namespace BitNetSharp.Models
 {
     public sealed class BitNetTokenizer
     {
+        private const string DefaultChatTemplate = "{% for message in messages %}{% if loop.first %}{{ bos_token }}{% endif %}{% if message['role'] == 'user' %}{{ 'Human: ' + message['content'] + '\n\nBITNETAssistant: ' + eos_token }}{% elif message['role'] == 'assistant' %}{{ message['content'] + eos_token }}{% endif %}{% endfor %}";
+        private const string EndOfTurnTokenText = "<|eot_id|>";
+        private const string UserPrefix = "User: ";
+        private const string AssistantPrefix = "Assistant: ";
         private static readonly ReadOnlyDictionary<byte, char> ByteEncoder = new(BuildByteEncoder());
         private static readonly ReadOnlyDictionary<char, byte> ByteDecoder = new(BuildByteDecoder(ByteEncoder));
 
@@ -17,6 +21,9 @@ namespace BitNetSharp.Models
         private readonly BitNetTokenizerConfig tokenizerConfig;
         private readonly Dictionary<string, int> tokenToId;
         private readonly Dictionary<(string Left, string Right), int> mergeRanks;
+        private readonly HashSet<int> specialTokenIds;
+        private readonly string[] specialTokenTexts;
+        private readonly int? endOfTurnTokenId;
 
         public BitNetTokenizer(BitNetTokenizerConfig tokenizerConfig)
         {
@@ -29,10 +36,27 @@ namespace BitNetSharp.Models
 
             this.tokenizerConfig = tokenizerConfig;
             tokenToId = new Dictionary<string, int>(tokenizerConfig.Tokens.Count, StringComparer.Ordinal);
+            specialTokenIds = new HashSet<int>();
+            List<string> discoveredSpecialTokenTexts = new();
             for (int index = 0; index < tokenizerConfig.Tokens.Count; index++)
             {
-                tokenToId[tokenizerConfig.Tokens[index]] = index;
+                string tokenText = tokenizerConfig.Tokens[index];
+                tokenToId[tokenText] = index;
+                if (LooksLikeSpecialToken(tokenText))
+                {
+                    specialTokenIds.Add(index);
+                    discoveredSpecialTokenTexts.Add(tokenText);
+                }
             }
+
+            specialTokenTexts = discoveredSpecialTokenTexts
+                .OrderByDescending(static tokenText => tokenText.Length)
+                .ToArray();
+
+            endOfTurnTokenId = tokenToId.TryGetValue(EndOfTurnTokenText, out int eotTokenId) ? eotTokenId : null;
+            specialTokenIds.Add(checked((int)tokenizerConfig.BosTokenId));
+            specialTokenIds.Add(checked((int)tokenizerConfig.EosTokenId));
+            specialTokenIds.Add(checked((int)tokenizerConfig.PaddingTokenId));
 
             mergeRanks = new Dictionary<(string Left, string Right), int>(tokenizerConfig.Merges.Count);
             for (int index = 0; index < tokenizerConfig.Merges.Count; index++)
@@ -64,15 +88,7 @@ namespace BitNetSharp.Models
                 tokenIds.Add(GetRequiredSpecialTokenId(tokenizerConfig.BosTokenId, "BOS"));
             }
 
-            foreach (Match match in EncodePattern.Matches(text))
-            {
-                if (!match.Success || match.Length == 0)
-                {
-                    continue;
-                }
-
-                EncodeMatch(match.Value, tokenIds);
-            }
+            EncodeText(text, tokenIds);
 
             if (addEos)
             {
@@ -111,6 +127,42 @@ namespace BitNetSharp.Models
             return builder.ToString();
         }
 
+        /// <summary>
+        /// Encodes a single chat message according to the configured GGUF chat template.
+        /// </summary>
+        public IReadOnlyList<int> EncodeChatMessageToIds(BitNetChatRole role, string content, bool isFirstMessage)
+        {
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                throw new ArgumentException("Chat message content must not be empty.", nameof(content));
+            }
+
+            EnsureSupportedChatTemplate();
+
+            List<int> tokenIds = new();
+            if (isFirstMessage && tokenizerConfig.AddBosToken)
+            {
+                tokenIds.Add(GetRequiredSpecialTokenId(tokenizerConfig.BosTokenId, "BOS"));
+            }
+
+            switch (role)
+            {
+                case BitNetChatRole.User:
+                    tokenIds.AddRange(EncodeToIds(string.Concat(UserPrefix, content), addBos: false, addEos: false));
+                    tokenIds.Add(GetConversationTurnDelimiterTokenId());
+                    tokenIds.AddRange(EncodeToIds(AssistantPrefix, addBos: false, addEos: false));
+                    break;
+                case BitNetChatRole.Assistant:
+                    tokenIds.AddRange(EncodeToIds(content, addBos: false, addEos: false));
+                    tokenIds.Add(GetConversationTurnDelimiterTokenId());
+                    break;
+                default:
+                    throw new NotSupportedException($"Chat role '{role}' is not supported.");
+            }
+
+            return tokenIds;
+        }
+
         private void EncodeMatch(string matchText, List<int> tokenIds)
         {
             string mappedText = MapTextToByteEncoding(matchText);
@@ -123,6 +175,83 @@ namespace BitNetSharp.Models
 
                 tokenIds.Add(tokenId);
             }
+        }
+
+        private void EncodeText(string text, List<int> tokenIds)
+        {
+            int position = 0;
+            while (position < text.Length)
+            {
+                if (TryMatchSpecialToken(text, position, out string? specialTokenText))
+                {
+                    tokenIds.Add(tokenToId[specialTokenText]);
+                    position += specialTokenText.Length;
+                    continue;
+                }
+
+                int nextSpecialTokenPosition = FindNextSpecialTokenPosition(text, position);
+                int length = nextSpecialTokenPosition < 0 ? text.Length - position : nextSpecialTokenPosition - position;
+                EncodeTextSegment(text.AsSpan(position, length), tokenIds);
+                position += length;
+            }
+        }
+
+        private void EncodeTextSegment(ReadOnlySpan<char> text, List<int> tokenIds)
+        {
+            if (text.IsEmpty)
+            {
+                return;
+            }
+
+            foreach (Match match in EncodePattern.Matches(text.ToString()))
+            {
+                if (!match.Success || match.Length == 0)
+                {
+                    continue;
+                }
+
+                EncodeMatch(match.Value, tokenIds);
+            }
+        }
+
+        private bool TryMatchSpecialToken(string text, int position, out string? specialTokenText)
+        {
+            foreach (string candidate in specialTokenTexts)
+            {
+                if (position + candidate.Length > text.Length)
+                {
+                    continue;
+                }
+
+                if (text.AsSpan(position, candidate.Length).SequenceEqual(candidate.AsSpan()))
+                {
+                    specialTokenText = candidate;
+                    return true;
+                }
+            }
+
+            specialTokenText = null;
+            return false;
+        }
+
+        private int FindNextSpecialTokenPosition(string text, int startIndex)
+        {
+            int nextPosition = -1;
+            foreach (string candidate in specialTokenTexts)
+            {
+                int candidatePosition = text.IndexOf(candidate, startIndex, StringComparison.Ordinal);
+                if (candidatePosition < 0)
+                {
+                    continue;
+                }
+
+                if (nextPosition < 0 || candidatePosition < nextPosition)
+                {
+                    nextPosition = candidatePosition;
+                }
+            }
+
+            return nextPosition;
         }
 
         private IEnumerable<string> ApplyBytePairEncoding(string mappedText)
@@ -251,11 +380,39 @@ namespace BitNetSharp.Models
             return checked((int)tokenId);
         }
 
+        internal int GetConversationTurnDelimiterTokenId()
+        {
+            return endOfTurnTokenId ?? GetRequiredSpecialTokenId(tokenizerConfig.EosTokenId, "EOS");
+        }
+
+        private void EnsureSupportedChatTemplate()
+        {
+            string chatTemplate = string.IsNullOrWhiteSpace(tokenizerConfig.ChatTemplate)
+                ? DefaultChatTemplate
+                : tokenizerConfig.ChatTemplate;
+
+            if (!IsSupportedChatTemplate(chatTemplate))
+            {
+                throw new NotSupportedException("The configured chat template is not supported by the built-in chat encoder.");
+            }
+        }
+
+        private static bool IsSupportedChatTemplate(string chatTemplate)
+        {
+            return chatTemplate.Contains("message['role'] == 'user'", StringComparison.Ordinal)
+                && chatTemplate.Contains("message['role'] == 'assistant'", StringComparison.Ordinal)
+                && chatTemplate.Contains("bos_token", StringComparison.Ordinal)
+                && chatTemplate.Contains("eos_token", StringComparison.Ordinal);
+        }
+
         private bool IsSpecialTokenId(int tokenId)
         {
-            return tokenId == checked((int)tokenizerConfig.BosTokenId)
-                || tokenId == checked((int)tokenizerConfig.EosTokenId)
-                || tokenId == checked((int)tokenizerConfig.PaddingTokenId);
+            return specialTokenIds.Contains(tokenId);
+        }
+
+        private static bool LooksLikeSpecialToken(string tokenText)
+        {
+            return tokenText.StartsWith("<|", StringComparison.Ordinal) && tokenText.EndsWith("|>", StringComparison.Ordinal);
         }
     }
 }

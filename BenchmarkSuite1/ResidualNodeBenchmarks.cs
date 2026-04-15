@@ -31,11 +31,7 @@ public class ResidualNodeBenchmarks
         model = new BitNetModel();
         model.Load(BenchmarkProjectPaths.ModelPath);
 
-        session = new BitNetSession(model, memoryManager)
-        {
-            Tokens = new[] { 0 },
-            CurrentToken = 0,
-        };
+        session = new BitNetSession(model, memoryManager, new[] { 0 });
         BenchmarkDataHelper.FillDeterministicValues(session.Embedding.Span, 37);
         BenchmarkDataHelper.FillDeterministicValues(session.AttentionOutput.Span, 41);
 
