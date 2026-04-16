@@ -108,3 +108,6 @@
 
 ## Session Management Instructions
 - In this repo, a new `BitNetSession` must be created for each session; a single session cannot be rolled back, reset, or modify history, and only forward state additions are allowed.
+
+## Testing Summary Instructions
+- In the testing summary table, the "Inference Chain/Location" column should maintain semantic consistency: fill it only when it can clearly indicate the node's location in the inference chain; leave it blank for pure parameter validation or general exception class tests, and do not forcefully label it as a specific inference chain segment.

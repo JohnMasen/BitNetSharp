@@ -2,6 +2,7 @@ using BitNetSharp;
 using BitNetSharp.Core;
 using BitNetSharp.Models;
 using BitNetSharp.Nodes;
+using System.CommandLine;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
@@ -11,8 +12,8 @@ namespace BitNetSharp.Console
     internal static class Program
     {
         private const string ExitCommand = "/exit";
-        private const string HelpArgument = "--help";
-        private const string HelpArgumentShort = "-h";
+        private const string MaxNewTokensArgument = "--max-new-tokens";
+        private const string TopKArgument = "--top-k";
         private const string ShowMemoryArgument = "--show-memory";
         private const string MemoryCsvArgument = "--memory-csv";
         private const string EnableSamplingArgument = "--enable-sampling";
@@ -28,23 +29,223 @@ namespace BitNetSharp.Console
         private static int Main(string[] args)
         {
             ConfigureConsoleEncoding();
+            RootCommand rootCommand = CreateRootCommand();
+            return rootCommand.Parse(args).Invoke();
+        }
 
-            if (!TryParseArguments(args, out ConsoleOptions? options, out string? errorMessage))
+        private static RootCommand CreateRootCommand()
+        {
+            Argument<string> modelPathArgument = new("model-path")
             {
-                if (string.IsNullOrWhiteSpace(errorMessage))
+                Description = "Path to the GGUF model file."
+            };
+            modelPathArgument.Validators.Add(result =>
+            {
+                if (result.Tokens.Count > 0 && string.IsNullOrWhiteSpace(result.Tokens[0].Value))
                 {
-                    PrintUsage();
-                    return 0;
+                    result.AddError("A GGUF model path is required.");
                 }
+            });
 
-                if (!string.IsNullOrWhiteSpace(errorMessage))
+            Option<int> maxNewTokensOption = new(MaxNewTokensArgument)
+            {
+                Description = "Maximum number of assistant tokens to generate. Default: 128",
+                DefaultValueFactory = _ => 128
+            };
+            maxNewTokensOption.Validators.Add(result =>
+            {
+                if (result.GetValue(maxNewTokensOption) <= 0)
                 {
-                    System.Console.Error.WriteLine(errorMessage);
+                    result.AddError("--max-new-tokens requires a positive integer value.");
                 }
+            });
 
-                PrintUsage();
-                return 1;
-            }
+            Option<int> topKOption = new(TopKArgument)
+            {
+                Description = "Top-K sampling candidate count. Default: 40",
+                DefaultValueFactory = _ => 40
+            };
+            topKOption.Validators.Add(result =>
+            {
+                if (result.GetValue(topKOption) <= 0)
+                {
+                    result.AddError("--top-k requires a positive integer value.");
+                }
+            });
+
+            Option<bool> enableSamplingOption = new(EnableSamplingArgument)
+            {
+                Description = "Enable Top-K probabilistic sampling instead of default greedy decoding."
+            };
+            Option<int?> samplingSeedOption = new(SamplingSeedArgument)
+            {
+                Description = "Use a fixed sampling seed for reproducible sampling output."
+            };
+            samplingSeedOption.Validators.Add(result =>
+            {
+                int? value = result.GetValue(samplingSeedOption);
+                if (value <= 0)
+                {
+                    result.AddError("--sampling-seed requires a positive integer value.");
+                }
+            });
+
+            Option<float> temperatureOption = new(TemperatureArgument)
+            {
+                Description = "Sampling temperature. Default: 0.8",
+                DefaultValueFactory = _ => 0.80f
+            };
+            temperatureOption.Validators.Add(result =>
+            {
+                if (result.GetValue(temperatureOption) < 0f)
+                {
+                    result.AddError("--temperature requires a non-negative numeric value.");
+                }
+            });
+
+            Option<float> topPOption = new(TopPArgument)
+            {
+                Description = "Nucleus sampling threshold. Default: 0.95",
+                DefaultValueFactory = _ => 0.95f
+            };
+            topPOption.Validators.Add(result =>
+            {
+                float value = result.GetValue(topPOption);
+                if (value <= 0f || value > 1f)
+                {
+                    result.AddError("--top-p requires a numeric value in the range (0, 1].");
+                }
+            });
+
+            Option<float> minPOption = new(MinPArgument)
+            {
+                Description = "Minimum probability threshold. Default: 0.05",
+                DefaultValueFactory = _ => 0.05f
+            };
+            minPOption.Validators.Add(result =>
+            {
+                float value = result.GetValue(minPOption);
+                if (value < 0f || value > 1f)
+                {
+                    result.AddError("--min-p requires a numeric value in the range [0, 1].");
+                }
+            });
+
+            Option<int> repeatLastNOption = new(RepeatLastNArgument)
+            {
+                Description = "Number of recent tokens considered for repeat penalty. Default: 64",
+                DefaultValueFactory = _ => 64
+            };
+            repeatLastNOption.Validators.Add(result =>
+            {
+                if (result.GetValue(repeatLastNOption) < 0)
+                {
+                    result.AddError("--repeat-last-n requires a non-negative integer value.");
+                }
+            });
+
+            Option<float> repeatPenaltyOption = new(RepeatPenaltyArgument)
+            {
+                Description = "Repeat penalty multiplier. Default: 1.0",
+                DefaultValueFactory = _ => 1.00f
+            };
+            repeatPenaltyOption.Validators.Add(result =>
+            {
+                if (result.GetValue(repeatPenaltyOption) <= 0f)
+                {
+                    result.AddError("--repeat-penalty requires a positive numeric value.");
+                }
+            });
+
+            Option<string?> promptOption = new(PromptArgument)
+            {
+                Description = "Run a single prompt, print the assistant reply, then exit."
+            };
+            promptOption.Validators.Add(result =>
+            {
+                if (result.Tokens.Count > 0 && string.IsNullOrWhiteSpace(result.GetValue(promptOption)))
+                {
+                    result.AddError("--prompt requires a text value.");
+                }
+            });
+
+            Option<bool> showTokenIdsOption = new(ShowTokenIdsArgument)
+            {
+                Description = "Show token ids alongside assistant output."
+            };
+            Option<bool> showMemoryOption = new(ShowMemoryArgument)
+            {
+                Description = "Show MemoryManager allocation summary and KV cache usage."
+            };
+            Option<string?> memoryCsvOption = new(MemoryCsvArgument)
+            {
+                Description = "Export memory allocation details to CSV."
+            };
+            memoryCsvOption.Validators.Add(result =>
+            {
+                if (result.Tokens.Count > 0 && string.IsNullOrWhiteSpace(result.GetValue(memoryCsvOption)))
+                {
+                    result.AddError("--memory-csv requires a file path value.");
+                }
+            });
+
+            RootCommand rootCommand = new("Run BitNetSharp GGUF models from the console.")
+            {
+                modelPathArgument,
+                maxNewTokensOption,
+                topKOption,
+                enableSamplingOption,
+                samplingSeedOption,
+                temperatureOption,
+                topPOption,
+                minPOption,
+                repeatLastNOption,
+                repeatPenaltyOption,
+                promptOption,
+                showTokenIdsOption,
+                showMemoryOption,
+                memoryCsvOption
+            };
+            rootCommand.SetAction(parseResult => Run(new ConsoleOptions(
+                parseResult.GetValue(modelPathArgument),
+                parseResult.GetValue(maxNewTokensOption),
+                parseResult.GetValue(topKOption),
+                IsSamplingEnabled(parseResult, enableSamplingOption, samplingSeedOption, temperatureOption, topPOption, minPOption, repeatLastNOption, repeatPenaltyOption),
+                parseResult.GetValue(samplingSeedOption),
+                parseResult.GetValue(temperatureOption),
+                parseResult.GetValue(topPOption),
+                parseResult.GetValue(minPOption),
+                parseResult.GetValue(repeatLastNOption),
+                parseResult.GetValue(repeatPenaltyOption),
+                parseResult.GetValue(promptOption),
+                parseResult.GetValue(showTokenIdsOption),
+                parseResult.GetValue(showMemoryOption) || parseResult.GetResult(memoryCsvOption) is not null,
+                parseResult.GetValue(memoryCsvOption))));
+            return rootCommand;
+        }
+
+        private static bool IsSamplingEnabled(
+            ParseResult parseResult,
+            Option<bool> enableSamplingOption,
+            Option<int?> samplingSeedOption,
+            Option<float> temperatureOption,
+            Option<float> topPOption,
+            Option<float> minPOption,
+            Option<int> repeatLastNOption,
+            Option<float> repeatPenaltyOption)
+        {
+            return parseResult.GetValue(enableSamplingOption)
+                || parseResult.GetResult(samplingSeedOption) is not null
+                || parseResult.GetResult(temperatureOption) is not null
+                || parseResult.GetResult(topPOption) is not null
+                || parseResult.GetResult(minPOption) is not null
+                || parseResult.GetResult(repeatLastNOption) is not null
+                || parseResult.GetResult(repeatPenaltyOption) is not null;
+        }
+
+        private static int Run(ConsoleOptions options)
+        {
+            ArgumentNullException.ThrowIfNull(options);
 
             using var model = new BitNetModel();
             model.Load(options.ModelPath);
@@ -231,224 +432,6 @@ namespace BitNetSharp.Console
                 File.WriteAllText(options.MemoryCsvPath, ConsoleMemoryReportHelper.BuildMemoryCsv(statistics, actualKvCacheBytes, allocatedKvCacheBytes), Encoding.UTF8);
                 System.Console.WriteLine($"[Memory Csv Path={options.MemoryCsvPath}]");
             }
-        }
-
-        private static void PrintUsage()
-        {
-            System.Console.WriteLine("Usage: BitNetSharp.Console <model.gguf> [--max-new-tokens <count>] [--top-k <count>] [--enable-sampling] [--sampling-seed <value>] [--temperature <value>] [--top-p <value>] [--min-p <value>] [--repeat-last-n <count>] [--repeat-penalty <value>] [--prompt <text>]");
-            System.Console.WriteLine();
-            System.Console.WriteLine("Options:");
-            System.Console.WriteLine("  --max-new-tokens <count>   Maximum Number of Assistant Tokens to Generate. Default: 128");
-            System.Console.WriteLine("  --top-k <count>            Top-K Sampling Candidate Count. Default: 10");
-            System.Console.WriteLine("  --enable-sampling          Enable Top-K probabilistic sampling instead of default greedy decoding.");
-            System.Console.WriteLine("  --sampling-seed <value>    Use a fixed sampling seed for reproducible sampling output.");
-            System.Console.WriteLine("  --temperature <value>      Sampling Temperature. Default: 0.8");
-            System.Console.WriteLine("  --top-p <value>            Nucleus Sampling Threshold. Default: 0.95");
-            System.Console.WriteLine("  --min-p <value>            Minimum Probability Threshold. Default: 0.05");
-            System.Console.WriteLine("  --repeat-last-n <count>    Number Of Recent Tokens Considered For Repeat Penalty. Default: 64");
-            System.Console.WriteLine("  --repeat-penalty <value>   Repeat Penalty Multiplier. Default: 1.0");
-            System.Console.WriteLine("  --prompt <text>            Run A Single Prompt, Print The Assistant Reply, Then Exit.");
-            System.Console.WriteLine("  --show-memory              Show MemoryManager allocation summary and KV cache usage.");
-            System.Console.WriteLine("  --memory-csv <path>        Export memory allocation details to CSV.");
-            System.Console.WriteLine($"  {HelpArgument}, {HelpArgumentShort}                 Show help and exit.");
-            System.Console.WriteLine();
-            System.Console.WriteLine($"At Runtime, Enter {ExitCommand}, Press Ctrl+C, Or Submit An Empty Line To Exit.");
-        }
-
-        private static bool TryParseArguments(string[] args, out ConsoleOptions? options, out string? errorMessage)
-        {
-            options = null;
-            errorMessage = null;
-
-            if (args.Length == 1 && (string.Equals(args[0], HelpArgument, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(args[0], HelpArgumentShort, StringComparison.OrdinalIgnoreCase)))
-            {
-                return false;
-            }
-
-            if (args.Length == 0 || string.IsNullOrWhiteSpace(args[0]))
-            {
-                errorMessage = "A GGUF model path is required.";
-                return false;
-            }
-
-            string modelPath = args[0];
-            int maxNewTokens = 128;
-            int topK = 40;
-            bool enableSampling = false;
-            int? samplingSeed = null;
-            float temperature = 0.80f;
-            float topP = 0.95f;
-            float minP = 0.05f;
-            int repeatLastN = 64;
-            float repeatPenalty = 1.00f;
-            string? prompt = null;
-            bool showTokenIds = false;
-            bool showMemory = false;
-            string? memoryCsvPath = null;
-            for (int index = 1; index < args.Length; index++)
-            {
-                string argument = args[index];
-                switch (argument)
-                {
-                    case "--max-new-tokens":
-                        if (!TryReadPositiveInt(args, ref index, out maxNewTokens))
-                        {
-                            errorMessage = "--max-new-tokens requires a positive integer value.";
-                            return false;
-                        }
-
-                        break;
-                    case "--top-k":
-                        if (!TryReadPositiveInt(args, ref index, out topK))
-                        {
-                            errorMessage = "--top-k requires a positive integer value.";
-                            return false;
-                        }
-
-                        break;
-                    case ShowMemoryArgument:
-                        showMemory = true;
-                        break;
-                    case EnableSamplingArgument:
-                        enableSampling = true;
-                        break;
-                    case SamplingSeedArgument:
-                        if (!TryReadPositiveInt(args, ref index, out int parsedSeed))
-                        {
-                            errorMessage = "--sampling-seed requires a positive integer value.";
-                            return false;
-                        }
-
-                        samplingSeed = parsedSeed;
-                        enableSampling = true;
-                        break;
-                    case TemperatureArgument:
-                        if (!TryReadFloatInRange(args, ref index, 0f, float.MaxValue, out temperature))
-                        {
-                            errorMessage = "--temperature requires a non-negative numeric value.";
-                            return false;
-                        }
-
-                        enableSampling = true;
-                        break;
-                    case TopPArgument:
-                        if (!TryReadFloatInRange(args, ref index, float.Epsilon, 1f, out topP))
-                        {
-                            errorMessage = "--top-p requires a numeric value in the range (0, 1].";
-                            return false;
-                        }
-
-                        enableSampling = true;
-                        break;
-                    case MinPArgument:
-                        if (!TryReadFloatInRange(args, ref index, 0f, 1f, out minP))
-                        {
-                            errorMessage = "--min-p requires a numeric value in the range [0, 1].";
-                            return false;
-                        }
-
-                        enableSampling = true;
-                        break;
-                    case RepeatLastNArgument:
-                        if (!TryReadNonNegativeInt(args, ref index, out repeatLastN))
-                        {
-                            errorMessage = "--repeat-last-n requires a non-negative integer value.";
-                            return false;
-                        }
-
-                        enableSampling = true;
-                        break;
-                    case RepeatPenaltyArgument:
-                        if (!TryReadFloatInRange(args, ref index, float.Epsilon, float.MaxValue, out repeatPenalty))
-                        {
-                            errorMessage = "--repeat-penalty requires a positive numeric value.";
-                            return false;
-                        }
-
-                        enableSampling = true;
-                        break;
-                    case PromptArgument:
-                        if (!TryReadRequiredString(args, ref index, out prompt))
-                        {
-                            errorMessage = "--prompt requires a text value.";
-                            return false;
-                        }
-
-                        break;
-                    case ShowTokenIdsArgument:
-                        showTokenIds = true;
-                        break;
-                    case MemoryCsvArgument:
-                        if (!TryReadRequiredString(args, ref index, out memoryCsvPath))
-                        {
-                            errorMessage = "--memory-csv requires a file path value.";
-                            return false;
-                        }
-
-                        showMemory = true;
-                        break;
-                    default:
-                        errorMessage = $"Unknown argument '{argument}'.";
-                        return false;
-                }
-            }
-
-            options = new ConsoleOptions(modelPath, maxNewTokens, topK, enableSampling, samplingSeed, temperature, topP, minP, repeatLastN, repeatPenalty, prompt, showTokenIds, showMemory, memoryCsvPath);
-            return true;
-        }
-
-        private static bool TryReadPositiveInt(string[] args, ref int index, out int value)
-        {
-            value = 0;
-            if (index + 1 >= args.Length || !int.TryParse(args[index + 1], out value) || value <= 0)
-            {
-                return false;
-            }
-
-            index++;
-            return true;
-        }
-
-        private static bool TryReadNonNegativeInt(string[] args, ref int index, out int value)
-        {
-            value = 0;
-            if (index + 1 >= args.Length || !int.TryParse(args[index + 1], out value) || value < 0)
-            {
-                return false;
-            }
-
-            index++;
-            return true;
-        }
-
-        private static bool TryReadRequiredString(string[] args, ref int index, out string? value)
-        {
-            value = null;
-            if (index + 1 >= args.Length || string.IsNullOrWhiteSpace(args[index + 1]))
-            {
-                return false;
-            }
-
-            value = args[++index];
-            return true;
-        }
-
-        private static bool TryReadFloatInRange(string[] args, ref int index, float minimumInclusive, float maximumInclusive, out float value)
-        {
-            value = 0f;
-            if (index + 1 >= args.Length || !float.TryParse(args[index + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out value))
-            {
-                return false;
-            }
-
-            if (value < minimumInclusive || value > maximumInclusive)
-            {
-                return false;
-            }
-
-            index++;
-            return true;
         }
 
         private static bool runtimeHasActiveSession(BitNetRuntime runtime)
