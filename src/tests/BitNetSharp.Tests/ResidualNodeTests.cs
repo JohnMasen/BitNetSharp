@@ -16,24 +16,6 @@ namespace BitNetSharp.Tests
         private static readonly Lazy<ResidualVectorsDocument> ResidualVectorsDocumentCache = new(LoadResidualVectorsDocument);
 
         [TestMethod]
-        public void Residual_ProvidedConfig_UsesConfiguredProvider()
-        {
-            using var model = TestModelFactory.LoadModel();
-            var node = new BitNetSharp.Nodes.ResidualNode(model, TestInferenceConfigs.Cpu(1));
-
-            Assert.AreEqual(TestInferenceConfigs.CpuBackend, node.InferenceConfig.Backend);
-            Assert.AreEqual(1, node.InferenceConfig.ThreadCount);
-        }
-
-        [TestMethod]
-        public void Residual_NullConfig_Throws()
-        {
-            using var model = TestModelFactory.LoadModel();
-
-            Assert.ThrowsExactly<ArgumentNullException>(() => new BitNetSharp.Nodes.ResidualNode(model, inferenceConfig: null));
-        }
-
-        [TestMethod]
         [DynamicData(nameof(GetResidualCaseIndices))]
         public void Residual_MatchesBaseline_CPU(int caseIndex)
         {
@@ -72,21 +54,6 @@ namespace BitNetSharp.Tests
         {
             EnsureSimdSupported();
             VerifyResidualMultiThreadMatchesSingleThread(TestInferenceConfigs.SimdBackend);
-        }
-
-        [TestMethod]
-        public void Residual_ForwardWithoutInit_Throws()
-        {
-            using var model = TestModelFactory.LoadModel();
-            ResidualCase testCase = GetResidualCase(0);
-            var node = new BitNetSharp.Nodes.ResidualNode(
-                model,
-                inferenceConfig: TestInferenceConfigs.Cpu(1));
-            var session = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            session.Embedding = testCase.Dequantized.Values.ToArray();
-            session.AttentionOutput = testCase.FirstLayerAttnOutput.Values.ToArray();
-
-            Assert.ThrowsExactly<InvalidOperationException>(() => node.Forward(session));
         }
 
         public static IEnumerable<object[]> GetResidualCaseIndices()

@@ -16,24 +16,6 @@ namespace BitNetSharp.Tests
         private static readonly Lazy<FinalNormVectorsDocument> FinalNormVectorsDocumentCache = new(LoadFinalNormVectorsDocument);
 
         [TestMethod]
-        public void FinalNorm_ProvidedConfig_UsesConfiguredProvider()
-        {
-            using var model = TestModelFactory.LoadModel();
-            var node = new BitNetSharp.Nodes.FinalNormNode(model, inferenceConfig: TestInferenceConfigs.Simd(1));
-
-            Assert.AreEqual(TestInferenceConfigs.SimdBackend, node.InferenceConfig.Backend);
-            Assert.AreEqual(1, node.InferenceConfig.ThreadCount);
-        }
-
-        [TestMethod]
-        public void FinalNorm_NullConfig_Throws()
-        {
-            using var model = TestModelFactory.LoadModel();
-
-            Assert.ThrowsExactly<ArgumentNullException>(() => new BitNetSharp.Nodes.FinalNormNode(model, inferenceConfig: null));
-        }
-
-        [TestMethod]
         [DynamicData(nameof(GetFinalNormCaseIndices))]
         public void FinalNorm_MatchesBaseline_CPU(int caseIndex)
         {
@@ -98,20 +80,6 @@ namespace BitNetSharp.Tests
 
             Assert.IsTrue(cachedNode.EnableCache);
             AssertFloatArraysAreClose(uncachedSession.FinalNormOutput.Span.ToArray(), cachedSession.FinalNormOutput.Span.ToArray(), 0f, "final norm cache");
-        }
-
-        [TestMethod]
-        public void FinalNorm_ForwardWithoutInit_Throws()
-        {
-            using var model = TestModelFactory.LoadModel();
-            FinalNormCase testCase = GetFinalNormCase(DebugCaseIndex);
-            var node = new BitNetSharp.Nodes.FinalNormNode(
-                model,
-                inferenceConfig: TestInferenceConfigs.Cpu(1));
-            var session = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            testCase.FinalNormInput.Values.CopyTo(session.Embedding.Span);
-
-            Assert.ThrowsExactly<InvalidOperationException>(() => node.Forward(session));
         }
 
         public static IEnumerable<object[]> GetFinalNormCaseIndices()

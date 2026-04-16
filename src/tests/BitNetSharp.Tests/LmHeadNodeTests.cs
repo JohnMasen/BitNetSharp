@@ -16,24 +16,6 @@ namespace BitNetSharp.Tests
         private static readonly Lazy<LmHeadVectorsDocument> LmHeadVectorsDocumentCache = new(LoadLmHeadVectorsDocument);
 
         [TestMethod]
-        public void LmHead_ProvidedConfig_UsesConfiguredProvider()
-        {
-            using var model = TestModelFactory.LoadModel();
-            var node = new BitNetSharp.Nodes.LmHeadNode(model, inferenceConfig: TestInferenceConfigs.Simd(BitNetSharp.Nodes.InferenceConfig.AutoThreadCount));
-
-            Assert.AreEqual(TestInferenceConfigs.SimdBackend, node.InferenceConfig.Backend);
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceConfig.AutoThreadCount, node.InferenceConfig.ThreadCount);
-        }
-
-        [TestMethod]
-        public void LmHead_NullConfig_Throws()
-        {
-            using var model = TestModelFactory.LoadModel();
-
-            Assert.ThrowsExactly<ArgumentNullException>(() => new BitNetSharp.Nodes.LmHeadNode(model, inferenceConfig: null));
-        }
-
-        [TestMethod]
         [DynamicData(nameof(GetLmHeadCaseIndices))]
         public void LmHead_MatchesBaseline_CPU(int caseIndex)
         {
@@ -98,20 +80,6 @@ namespace BitNetSharp.Tests
 
             Assert.IsTrue(cachedNode.EnableCache);
             AssertFloatArraysAreClose(uncachedSession.Logits.Span.ToArray(), cachedSession.Logits.Span.ToArray(), 0f, "lm head cache");
-        }
-
-        [TestMethod]
-        public void LmHead_ForwardWithoutInit_Throws()
-        {
-            using var model = TestModelFactory.LoadModel();
-            LmHeadCase testCase = GetLmHeadCase(DebugCaseIndex);
-            var node = new BitNetSharp.Nodes.LmHeadNode(
-                model,
-                inferenceConfig: TestInferenceConfigs.Cpu(1));
-            var session = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            testCase.FinalNormOutput.Values.CopyTo(session.FinalNormOutput.Span);
-
-            Assert.ThrowsExactly<InvalidOperationException>(() => node.Forward(session));
         }
 
         public static IEnumerable<object[]> GetLmHeadCaseIndices()

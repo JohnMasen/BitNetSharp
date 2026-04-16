@@ -67,7 +67,8 @@
 - Use class-level test initialization to load the GGUF model once, reuse it across tests in the class, and release it in class cleanup.
 - Load the GGUF model in shared test initialization and ensure proper release after the test scope ends.
 - Use shorter, clearer test names that are easy to scan at a glance.
-- In this repo, tokenizer-related test data should be based on the authoritative source results provided by the dump agent. **When requesting data from the dump agent, only list the required data without explaining the purpose or background.**
+- In this repo, tokenizer-related test data should be based on the authoritative source results provided by the dump agent. **When requesting data from the dump agent, only list the required data without explaining the purpose or background.** 
+- If test data already contains verifiable data, use it directly; only stop self-advancing and inform the user when data is missing, needing to ask the dump agent, encountering loops, resolving issues, or determining that issues cannot be resolved.
 - For subsequent hi tests in this repo, set max tokens to 32 to save time.
 
 ## Layer Testing Instructions

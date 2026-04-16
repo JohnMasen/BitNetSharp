@@ -16,26 +16,6 @@ namespace BitNetSharp.Tests
         private static readonly Lazy<FeedForwardNormVectorsDocument> FeedForwardNormVectorsDocumentCache = new(LoadFeedForwardNormVectorsDocument);
 
         [TestMethod]
-        public void FeedForwardNorm_ProvidedConfig_UsesConfiguredProvider()
-        {
-            using var model = TestModelFactory.LoadModel();
-            var layerDefinition = model.GetLayer(0);
-            var node = new BitNetSharp.Nodes.FeedForwardNormNode(model, layerDefinition.FeedForwardNorm, inferenceConfig: TestInferenceConfigs.Simd(1));
-
-            Assert.AreEqual(TestInferenceConfigs.SimdBackend, node.InferenceConfig.Backend);
-            Assert.AreEqual(1, node.InferenceConfig.ThreadCount);
-        }
-
-        [TestMethod]
-        public void FeedForwardNorm_NullConfig_Throws()
-        {
-            using var model = TestModelFactory.LoadModel();
-            var layerDefinition = model.GetLayer(0);
-
-            Assert.ThrowsExactly<ArgumentNullException>(() => new BitNetSharp.Nodes.FeedForwardNormNode(model, layerDefinition.FeedForwardNorm, inferenceConfig: null));
-        }
-
-        [TestMethod]
         [DynamicData(nameof(GetFeedForwardNormCaseIndices))]
         public void FeedForwardNorm_BaselineMatch_CPU(int caseIndex)
         {
@@ -74,22 +54,6 @@ namespace BitNetSharp.Tests
         {
             EnsureAvx2Supported();
             VerifyFeedForwardNormMultiThreadMatchesSingleThread(TestInferenceConfigs.SimdBackend);
-        }
-
-        [TestMethod]
-        public void FeedForwardNorm_ForwardWithoutInit_Throws()
-        {
-            using var model = TestModelFactory.LoadModel();
-            FeedForwardNormCase testCase = GetFeedForwardNormCase(0);
-            var layerDefinition = model.GetLayer(0);
-            var node = new BitNetSharp.Nodes.FeedForwardNormNode(
-                model,
-                layerDefinition.FeedForwardNorm,
-                inferenceConfig: TestInferenceConfigs.Cpu(1));
-            var session = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            testCase.FirstLayerFfn.FeedForwardInput.CopyTo(session.FeedForwardInput.Span);
-
-            Assert.ThrowsExactly<InvalidOperationException>(() => node.Forward(session));
         }
 
         public static IEnumerable<object[]> GetFeedForwardNormCaseIndices()

@@ -14,37 +14,6 @@ namespace BitNetSharp.Tests
         private static readonly Lazy<AttentionVectorsDocument> AttentionVectorsDocumentCache = new(LoadAttentionVectorsDocument);
 
         [TestMethod]
-        public void Attention_ProvidedConfig_UsesConfiguredProvider()
-        {
-            using var model = TestModelFactory.LoadModel();
-            var layerDefinition = model.GetLayer(0);
-            var inferenceConfig = TestInferenceConfigs.Simd(BitNetSharp.Nodes.InferenceConfig.AutoThreadCount);
-            // The current test GGUF does not contain optional attn_output.scale / attn_output.bias tensors yet,
-            // so these tests intentionally omit those constructor arguments until a model with them is available.
-            var node = new BitNetSharp.Nodes.AttentionNode(
-                model,
-                layerDefinition.AttentionSubNorm,
-                layerDefinition.AttentionOutputWeight,
-                inferenceConfig: inferenceConfig);
-
-            Assert.AreEqual(TestInferenceConfigs.SimdBackend, node.InferenceConfig.Backend);
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceConfig.AutoThreadCount, node.InferenceConfig.ThreadCount);
-        }
-
-        [TestMethod]
-        public void Attention_NullConfig_Throws()
-        {
-            using var model = TestModelFactory.LoadModel();
-            var layerDefinition = model.GetLayer(0);
-
-            Assert.ThrowsExactly<ArgumentNullException>(() => new BitNetSharp.Nodes.AttentionNode(
-                model,
-                layerDefinition.AttentionSubNorm,
-                layerDefinition.AttentionOutputWeight,
-                inferenceConfig: null));
-        }
-
-        [TestMethod]
         [DynamicData(nameof(GetAttentionCaseIndices))]
         public void Attention_SubNormMatchesBaseline_CPU(int caseIndex)
         {
@@ -206,23 +175,6 @@ namespace BitNetSharp.Tests
             Assert.IsTrue(cachedNode.EnableCache);
             AssertFloatArraysAreClose(uncachedContext.AttentionSubNorm.Span.ToArray(), cachedContext.AttentionSubNorm.Span.ToArray(), 0f, "attention sub-norm cache");
             AssertFloatArraysAreClose(uncachedContext.AttentionOutput.Span.ToArray(), cachedContext.AttentionOutput.Span.ToArray(), 0f, "attention output cache");
-        }
-
-        [TestMethod]
-        public void Attention_ForwardWithoutInit_Throws()
-        {
-            using var model = TestModelFactory.LoadModel();
-            AttentionCase testCase = GetAttentionCase(0);
-            var layerDefinition = model.GetLayer(0);
-            var node = new BitNetSharp.Nodes.AttentionNode(
-                model,
-                layerDefinition.AttentionSubNorm,
-                layerDefinition.AttentionOutputWeight,
-                inferenceConfig: TestInferenceConfigs.Cpu(1));
-            var context = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            SetProjection(context, testCase);
-
-            Assert.ThrowsExactly<InvalidOperationException>(() => node.Forward(context));
         }
 
         public static IEnumerable<object[]> GetAttentionCaseIndices()

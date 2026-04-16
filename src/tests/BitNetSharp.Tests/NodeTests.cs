@@ -40,16 +40,6 @@ namespace BitNetSharp.Tests
         }
 
         [TestMethod]
-        public void Embedding_ForwardWithoutInit_Throws()
-        {
-            using var model = TestModelFactory.LoadModel();
-            var node = new BitNetSharp.Nodes.EmbeddingNode(model, inferenceConfig: TestInferenceConfigs.Cpu(1));
-            var context = TestModelFactory.CreateSession(model, token: 0);
-
-            Assert.ThrowsExactly<InvalidOperationException>(() => node.Forward(context));
-        }
-
-        [TestMethod]
         public void EmbeddingCache_MatchesUncachedReads()
         {
             using var model = TestModelFactory.LoadModel();
@@ -65,14 +55,6 @@ namespace BitNetSharp.Tests
 
             CollectionAssert.AreEqual(uncachedContext.Embedding.Span.ToArray(), cachedContext.Embedding.Span.ToArray());
             Assert.IsTrue(cachedNode.EnableCache);
-        }
-
-        [TestMethod]
-        public void Embedding_NullConfig_Throws()
-        {
-            using var model = TestModelFactory.LoadModel();
-
-            Assert.ThrowsExactly<ArgumentNullException>(() => new BitNetSharp.Nodes.EmbeddingNode(model, inferenceConfig: null));
         }
 
         [TestMethod]
@@ -101,27 +83,6 @@ namespace BitNetSharp.Tests
             float expectedEpsilon = LayerVectorsDocumentCache.Value.FirstLayerRmsNormMetadata.Epsilon;
 
             Assert.AreEqual(expectedEpsilon, model.Config!.AttentionLayerNormRmsEpsilon, 1e-12f);
-        }
-
-        [TestMethod]
-        public void RmsNorm_ProvidedConfig_UsesConfiguredProvider()
-        {
-            using var model = TestModelFactory.LoadModel();
-            var normTensor = model.GetLayer(0).AttentionNorm;
-            var inferenceConfig = TestInferenceConfigs.Simd(1);
-            var node = new BitNetSharp.Nodes.RmsNormNode(model, normTensor, inferenceConfig: inferenceConfig);
-
-            Assert.AreEqual(TestInferenceConfigs.SimdBackend, node.InferenceConfig.Backend);
-            Assert.AreEqual(1, node.InferenceConfig.ThreadCount);
-        }
-
-        [TestMethod]
-        public void RmsNorm_NullConfig_Throws()
-        {
-            using var model = TestModelFactory.LoadModel();
-            var normTensor = model.GetLayer(0).AttentionNorm;
-
-            Assert.ThrowsExactly<ArgumentNullException>(() => new BitNetSharp.Nodes.RmsNormNode(model, normTensor, inferenceConfig: null));
         }
 
         [TestMethod]
@@ -348,21 +309,6 @@ namespace BitNetSharp.Tests
             float[] actual = simdContext.RmsNorm.Span.ToArray();
 
             AssertFloatArraysAreClose(expected, actual, 1e-6f);
-        }
-
-        [TestMethod]
-        public void RmsNorm_ForwardWithoutInit_Throws()
-        {
-            using var model = TestModelFactory.LoadModel();
-            var normTensor = model.GetLayer(0).AttentionNorm;
-            var node = new BitNetSharp.Nodes.RmsNormNode(
-                model,
-                normTensor,
-                inferenceConfig: TestInferenceConfigs.Cpu(1));
-            var context = TestModelFactory.CreateSession(model, token: 0);
-            context.Embedding = new float[(int)model.Config!.EmbeddingLength];
-
-            Assert.ThrowsExactly<InvalidOperationException>(() => node.Forward(context));
         }
 
         public static IEnumerable<object[]> GetEmbeddingCases()

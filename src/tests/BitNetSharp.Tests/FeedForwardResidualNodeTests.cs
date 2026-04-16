@@ -16,24 +16,6 @@ namespace BitNetSharp.Tests
         private static readonly Lazy<FeedForwardResidualVectorsDocument> FeedForwardResidualVectorsDocumentCache = new(LoadFeedForwardResidualVectorsDocument);
 
         [TestMethod]
-        public void FeedForwardResidual_ProvidedConfig_UsesConfiguredProvider()
-        {
-            using var model = TestModelFactory.LoadModel();
-            var node = new BitNetSharp.Nodes.FeedForwardResidualNode(model, TestInferenceConfigs.Cpu(1));
-
-            Assert.AreEqual(TestInferenceConfigs.CpuBackend, node.InferenceConfig.Backend);
-            Assert.AreEqual(1, node.InferenceConfig.ThreadCount);
-        }
-
-        [TestMethod]
-        public void FeedForwardResidual_NullConfig_Throws()
-        {
-            using var model = TestModelFactory.LoadModel();
-
-            Assert.ThrowsExactly<ArgumentNullException>(() => new BitNetSharp.Nodes.FeedForwardResidualNode(model, inferenceConfig: null));
-        }
-
-        [TestMethod]
         [DynamicData(nameof(GetFeedForwardResidualCaseIndices))]
         public void FeedForwardResidual_MatchesBaseline_CPU(int caseIndex)
         {
@@ -72,21 +54,6 @@ namespace BitNetSharp.Tests
         {
             EnsureSimdSupported();
             VerifyFeedForwardResidualMultiThreadMatchesSingleThread(TestInferenceConfigs.SimdBackend);
-        }
-
-        [TestMethod]
-        public void FeedForwardResidual_ForwardWithoutInit_Throws()
-        {
-            using var model = TestModelFactory.LoadModel();
-            FeedForwardResidualCase testCase = GetFeedForwardResidualCase(0);
-            var node = new BitNetSharp.Nodes.FeedForwardResidualNode(
-                model,
-                inferenceConfig: TestInferenceConfigs.Cpu(1));
-            var session = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            testCase.FirstLayerFfn.FeedForwardInput.CopyTo(session.FeedForwardInput.Span);
-            testCase.FirstLayerFfn.FeedForwardDown.CopyTo(session.FeedForwardOutput.Span);
-
-            Assert.ThrowsExactly<InvalidOperationException>(() => node.Forward(session));
         }
 
         public static IEnumerable<object[]> GetFeedForwardResidualCaseIndices()

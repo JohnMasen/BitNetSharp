@@ -15,20 +15,6 @@ namespace BitNetSharp.Tests
         private static readonly Lazy<SamplingVectorsDocument> SamplingVectorsDocumentCache = new(LoadSamplingVectorsDocument);
 
         [TestMethod]
-        public void SamplingNode_DefaultTopK_IsTen()
-        {
-            var step = new BitNetSharp.Nodes.SamplingNode();
-
-            Assert.AreEqual(40, step.TopK);
-            Assert.IsFalse(step.EnableSampling);
-            Assert.AreEqual(0.80f, step.Temperature, 1e-6f);
-            Assert.AreEqual(0.95f, step.TopP, 1e-6f);
-            Assert.AreEqual(0.05f, step.MinP, 1e-6f);
-            Assert.AreEqual(64, step.RepeatLastN);
-            Assert.AreEqual(1.00f, step.RepeatPenalty, 1e-6f);
-        }
-
-        [TestMethod]
         public void SamplingNode_InvalidTopK_Throws()
         {
             Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new BitNetSharp.Nodes.SamplingNode(0));

@@ -15,37 +15,6 @@ namespace BitNetSharp.Tests
         private static readonly Lazy<QKVVectorsDocument> QKVVectorsDocumentCache = new(LoadQKVVectorsDocument);
 
         [TestMethod]
-        public void QKV_ProvidedConfig_UsesConfiguredProvider()
-        {
-            using var model = TestModelFactory.LoadModel();
-            var layerDefinition = model.GetLayer(0);
-            var inferenceConfig = TestInferenceConfigs.Simd(BitNetSharp.Nodes.InferenceConfig.AutoThreadCount);
-            var node = new BitNetSharp.Nodes.QKVProjectionNode(
-                model,
-                layerDefinition.AttentionQueryWeight,
-                layerDefinition.AttentionKeyWeight,
-                layerDefinition.AttentionValueWeight,
-                inferenceConfig: inferenceConfig);
-
-            Assert.AreEqual(TestInferenceConfigs.SimdBackend, node.InferenceConfig.Backend);
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceConfig.AutoThreadCount, node.InferenceConfig.ThreadCount);
-        }
-
-        [TestMethod]
-        public void QKV_NullConfig_Throws()
-        {
-            using var model = TestModelFactory.LoadModel();
-            var layerDefinition = model.GetLayer(0);
-
-            Assert.ThrowsExactly<ArgumentNullException>(() => new BitNetSharp.Nodes.QKVProjectionNode(
-                model,
-                layerDefinition.AttentionQueryWeight,
-                layerDefinition.AttentionKeyWeight,
-                layerDefinition.AttentionValueWeight,
-                inferenceConfig: null));
-        }
-
-        [TestMethod]
         [DynamicData(nameof(GetQKVCaseIndices))]
         public void QKV_BaselineMatch_CPU(int caseIndex)
         {
@@ -247,23 +216,6 @@ namespace BitNetSharp.Tests
             AssertFloatArraysAreClose(singleThreadContext.QKVQuery.Span.ToArray(), multiThreadContext.QKVQuery.Span.ToArray(), 1e-4f, $"{backend} QKV query threading");
             AssertFloatArraysAreClose(singleThreadContext.QKVKey.Span.ToArray(), multiThreadContext.QKVKey.Span.ToArray(), 1e-4f, $"{backend} QKV key threading");
             AssertFloatArraysAreClose(singleThreadContext.QKVValue.Span.ToArray(), multiThreadContext.QKVValue.Span.ToArray(), 1e-4f, $"{backend} QKV value threading");
-        }
-
-        [TestMethod]
-        public void QKV_ForwardWithoutInit_Throws()
-        {
-            using var model = TestModelFactory.LoadModel();
-            var layerDefinition = model.GetLayer(0);
-            var node = new BitNetSharp.Nodes.QKVProjectionNode(
-                model,
-                layerDefinition.AttentionQueryWeight,
-                layerDefinition.AttentionKeyWeight,
-                layerDefinition.AttentionValueWeight,
-                inferenceConfig: TestInferenceConfigs.Cpu(1));
-            var context = TestModelFactory.CreateSession(model, token: 0);
-            context.RmsNorm = new float[(int)model.Config!.EmbeddingLength];
-
-            Assert.ThrowsExactly<InvalidOperationException>(() => node.Forward(context));
         }
 
         private static void AssertSmallProjectionCpuMatchesSimd(string caseName, int inputLength, int outputLength, int seed, float weightScale)

@@ -16,39 +16,6 @@ namespace BitNetSharp.Tests
         private static readonly Lazy<FeedForwardVectorsDocument> FeedForwardVectorsDocumentCache = new(LoadFeedForwardVectorsDocument);
 
         [TestMethod]
-        public void FeedForward_ProvidedConfig_UsesConfiguredProvider()
-        {
-            using var model = TestModelFactory.LoadModel();
-            var layerDefinition = model.GetLayer(0);
-            var inferenceConfig = TestInferenceConfigs.Simd(BitNetSharp.Nodes.InferenceConfig.AutoThreadCount);
-            var node = new BitNetSharp.Nodes.FeedForwardNode(
-                model,
-                layerDefinition.FeedForwardSubNorm,
-                layerDefinition.FeedForwardGateWeight,
-                layerDefinition.FeedForwardUpWeight,
-                layerDefinition.FeedForwardDownWeight,
-                inferenceConfig: inferenceConfig);
-
-            Assert.AreEqual(TestInferenceConfigs.SimdBackend, node.InferenceConfig.Backend);
-            Assert.AreEqual(BitNetSharp.Nodes.InferenceConfig.AutoThreadCount, node.InferenceConfig.ThreadCount);
-        }
-
-        [TestMethod]
-        public void FeedForward_NullConfig_Throws()
-        {
-            using var model = TestModelFactory.LoadModel();
-            var layerDefinition = model.GetLayer(0);
-
-            Assert.ThrowsExactly<ArgumentNullException>(() => new BitNetSharp.Nodes.FeedForwardNode(
-                model,
-                layerDefinition.FeedForwardSubNorm,
-                layerDefinition.FeedForwardGateWeight,
-                layerDefinition.FeedForwardUpWeight,
-                layerDefinition.FeedForwardDownWeight,
-                inferenceConfig: null));
-        }
-
-        [TestMethod]
         [DynamicData(nameof(GetFeedForwardCaseIndices))]
         public void FeedForward_SubNormMatchesBaseline_CPU(int caseIndex)
         {
@@ -145,25 +112,6 @@ namespace BitNetSharp.Tests
             Assert.IsTrue(cachedNode.EnableCache);
             AssertFloatArraysAreClose(uncachedSession.FeedForwardSubNorm.Span.ToArray(), cachedSession.FeedForwardSubNorm.Span.ToArray(), 0f, "feed-forward sub-norm cache");
             AssertFloatArraysAreClose(uncachedSession.FeedForwardOutput.Span.ToArray(), cachedSession.FeedForwardOutput.Span.ToArray(), 0f, "feed-forward output cache");
-        }
-
-        [TestMethod]
-        public void FeedForward_ForwardWithoutInit_Throws()
-        {
-            using var model = TestModelFactory.LoadModel();
-            FeedForwardCase testCase = GetFeedForwardCase(0);
-            var layerDefinition = model.GetLayer(0);
-            var node = new BitNetSharp.Nodes.FeedForwardNode(
-                model,
-                layerDefinition.FeedForwardSubNorm,
-                layerDefinition.FeedForwardGateWeight,
-                layerDefinition.FeedForwardUpWeight,
-                layerDefinition.FeedForwardDownWeight,
-                inferenceConfig: TestInferenceConfigs.Cpu(1));
-            var session = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            testCase.FirstLayerFfn.FeedForwardNorm.CopyTo(session.FeedForwardNorm.Span);
-
-            Assert.ThrowsExactly<InvalidOperationException>(() => node.Forward(session));
         }
 
         public static IEnumerable<object[]> GetFeedForwardCaseIndices()

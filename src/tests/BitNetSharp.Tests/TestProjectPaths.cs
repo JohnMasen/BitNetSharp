@@ -29,28 +29,16 @@ namespace BitNetSharp.Tests
             "TestData",
             "layer_vectors_pure.json");
 
-        public static string HiTopCandidatesDumpPath => Path.Combine(
+        public static string FullDumpDirectoryPath => Path.Combine(
             AppContext.BaseDirectory,
             "..",
             "..",
             "..",
             "TestData",
-            "hi_top_candidates_dump.json");
+            "FullDump");
 
-        public static string HiChatFullDumpPath => Path.Combine(
-            AppContext.BaseDirectory,
-            "..",
-            "..",
-            "..",
-            "TestData",
-            "hi_chat_full_dump.json");
+        public static string FullDumpManifestPath => Path.Combine(FullDumpDirectoryPath, "manifest.json");
 
-        public static string HiRopeKCacheDumpPath => Path.Combine(
-            AppContext.BaseDirectory,
-            "..",
-            "..",
-            "..",
-            "TestData",
-            "hi_rope_k_cache_dump.json");
+        public static string FullDumpDataPath => Path.Combine(FullDumpDirectoryPath, "data.bin");
     }
 }
