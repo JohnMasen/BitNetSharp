@@ -111,3 +111,6 @@
 
 ## Testing Summary Instructions
 - In the testing summary table, the "Inference Chain/Location" column should maintain semantic consistency: fill it only when it can clearly indicate the node's location in the inference chain; leave it blank for pure parameter validation or general exception class tests, and do not forcefully label it as a specific inference chain segment.
+
+## README Content
+- For this repo, write README content in English.

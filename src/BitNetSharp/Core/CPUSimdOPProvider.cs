@@ -15,6 +15,7 @@ namespace BitNetSharp.Core
     {
         private static readonly Vector256<byte> v256_3 = Vector256.Create((byte)0b_0000_0011);
         private static readonly Vector256<byte> v256_2 = Vector256.Create((byte)0b_0000_0010);
+        private static readonly Vector256<byte> v256_1 = Vector256.Create((byte)0b_0000_0001);
         public CPUSimdOPProvider(int threadCount = Nodes.InferenceConfig.AutoThreadCount)
         {
             if (threadCount < 0)
@@ -827,10 +828,13 @@ namespace BitNetSharp.Core
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Vector256<byte> NormalizeBitNetWeightCodes(Vector256<byte> packedWeightCodes, Vector256<byte> bitMask)
         {
-            Vector256<byte> weightCodes = Vector256.BitwiseAnd(packedWeightCodes, bitMask);
-            Vector256<byte> threeMask = Avx2.CompareEqual(weightCodes, v256_3);
-            Vector256<byte> correction = Vector256.BitwiseAnd(threeMask, v256_2);
-            return Avx2.Subtract(weightCodes, correction);
+            Vector256<byte> weightCodes = Vector256.BitwiseAnd(packedWeightCodes, bitMask);//extract the lower 2 bits
+            //the following code map 3=>1, it will be 0 at next step. as 3 is invalid in the bitnet, this should be pre-checked, not hotfix on each loop
+            //TODO: pre-check weigths instead of fixing it on each loop
+            //pre-check code should placed at QKVProjectionNode.ParsePackedWeights,check in loop and throw if any invaid value found
+            Vector256<byte> threeMask = Avx2.CompareEqual(weightCodes, v256_3);  //filter :value ==3
+            Vector256<byte> correction = Vector256.BitwiseAnd(threeMask, v256_2);  //set b =2 where value ==3
+            return Avx2.Subtract(weightCodes, correction); // value -=2 where value ==3, map 3 to 1, 3 is invalid value in mapping table, map it to 1
         }
     }
 }

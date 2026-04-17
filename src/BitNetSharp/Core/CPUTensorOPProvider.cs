@@ -1,5 +1,7 @@
 using System.Buffers;
+using System.Numerics;
 using System.Numerics.Tensors;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace BitNetSharp.Core
@@ -320,11 +322,45 @@ namespace BitNetSharp.Core
             {
                 ReadOnlySpan<byte> packedRow = packedWeights.Slice(outputIndex * packedRowByteCount, packedRowByteCount);
                 rowWeights.Clear();
-                CPUDefaultOPProvider.ExpandBitNetRowWeights(packedRow, rowWeights);
+                ExpandBitNetRowWeights(packedRow, rowWeights);
                 float mappedDot = TensorPrimitives.Dot(rowWeights, quantizedValues);
                 // Restore the final float projection value from the mapped dot product and the activation/weight scales.
                 output[outputIndex] = (mappedDot / activationScale) * weightScale;
             }
+        }
+        private static void ExpandBitNetRowWeights(ReadOnlySpan<byte> packedWeights,Span<float> weights)
+        {
+            if (packedWeights.Length % 32 != 0|| weights.Length % 128 !=0 )
+            {
+                throw new InvalidOperationException("Invalid packed weight length or weights length");
+            }
+            const int PackedGroupWidth = 32;
+            const int ActivationBlockWidth = 128;
+
+            for (int blockIndex = 0; blockIndex < packedWeights.Length/32; blockIndex++)
+            {
+                var currentPackedWeights = packedWeights.Slice(blockIndex, PackedGroupWidth);
+                var currentWeights = weights.Slice(blockIndex, ActivationBlockWidth);
+                //TensorPrimitives.ConvertSaturating(packedWeights, weights);
+                
+
+                extractWeightGroup(currentPackedWeights, 6, currentWeights.Slice(0,32));
+                extractWeightGroup(currentPackedWeights, 4, currentWeights.Slice(32,32));
+                extractWeightGroup(currentPackedWeights, 2, currentWeights.Slice(64,32));
+                extractWeightGroup(currentPackedWeights, 0, currentWeights.Slice(96,32));
+
+            }
+            TensorPrimitives.Subtract(weights, 1, weights);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            void extractWeightGroup(ReadOnlySpan<byte> data,int shiftAmount,Span<float> output)
+            {
+                Span<byte> tmp = stackalloc byte[PackedGroupWidth];
+                TensorPrimitives.ShiftRightLogical(data, shiftAmount, tmp);
+                
+                TensorPrimitives.BitwiseAnd(tmp, (byte)0b0000_0011, tmp);
+                TensorPrimitives.ConvertSaturating<byte,float>(tmp, output);
+            }
+            
         }
 
         private static void ProjectLmHeadRange(ReadOnlySpan<float> input, ReadOnlySpan<Half> embeddingWeights, int rowLength, Span<float> output, Span<float> rowBuffer)
@@ -339,14 +375,16 @@ namespace BitNetSharp.Core
 
         private static void ConvertHalfToSingle(ReadOnlySpan<Half> source, Span<float> destination)
         {
-            for (int index = 0; index < source.Length; index++)
-            {
-                destination[index] = (float)source[index];
-            }
+            TensorPrimitives.ConvertToSingle(source, destination);
+            //for (int index = 0; index < source.Length; index++)
+            //{
+            //    destination[index] = (float)source[index];
+            //}
         }
 
         private static void ConvertQuantizedValuesToSingle(ReadOnlySpan<sbyte> source, Span<float> destination)
         {
+            TensorPrimitives.ConvertSaturating(source, destination);
             for (int index = 0; index < source.Length; index++)
             {
                 destination[index] = source[index];
