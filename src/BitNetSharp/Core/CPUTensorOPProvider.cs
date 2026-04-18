@@ -339,8 +339,8 @@ namespace BitNetSharp.Core
 
             for (int blockIndex = 0; blockIndex < packedWeights.Length/32; blockIndex++)
             {
-                var currentPackedWeights = packedWeights.Slice(blockIndex, PackedGroupWidth);
-                var currentWeights = weights.Slice(blockIndex, ActivationBlockWidth);
+                var currentPackedWeights = packedWeights.Slice(blockIndex*PackedGroupWidth, PackedGroupWidth);
+                var currentWeights = weights.Slice(blockIndex*ActivationBlockWidth, ActivationBlockWidth);
                 //TensorPrimitives.ConvertSaturating(packedWeights, weights);
                 
 
