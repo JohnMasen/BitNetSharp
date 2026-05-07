@@ -1,5 +1,6 @@
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Order;
+using BitNetSharp.Core;
 using BitNetSharp.Nodes;
 using BitNetSharp.Models;
 using Microsoft.VSDiagnostics;
@@ -31,8 +32,8 @@ public class FeedForwardResidualNodeBenchmarks
         model.Load(BenchmarkProjectPaths.ModelPath);
 
         session = new BitNetSession(model, memoryManager, new[] { 0 });
-        BenchmarkDataHelper.FillDeterministicValues(session.FeedForwardInput.Span, 11);
-        BenchmarkDataHelper.FillDeterministicValues(session.FeedForwardOutput.Span, 13);
+        BenchmarkDataHelper.FillDeterministicValues(RuntimeTensorBufferExtensions.GetMemory<float>(session.FeedForwardInput).Span, 11);
+        BenchmarkDataHelper.FillDeterministicValues(RuntimeTensorBufferExtensions.GetMemory<float>(session.FeedForwardOutput).Span, 13);
 
         cpuSingleThreadNode = CreateNode(BenchmarkInferenceConfigs.Cpu(1));
         cpuMultiThreadNode = CreateNode(BenchmarkInferenceConfigs.Cpu(InferenceConfig.AutoThreadCount));
@@ -105,7 +106,7 @@ public class FeedForwardResidualNodeBenchmarks
     private Memory<float> Run(FeedForwardResidualNode node)
     {
         node.Forward(session!);
-        return session!.Embedding;
+        return RuntimeTensorBufferExtensions.GetMemory<float>(session!.Embedding);
     }
 
 }

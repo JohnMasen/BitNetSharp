@@ -91,7 +91,7 @@ namespace BitNetSharp.Tests
 
             node.Init();
             node.Forward(context);
-            Memory<float> actual = context.AttentionSubNorm;
+            Memory<float> actual = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(context.AttentionSubNorm);
 
             AssertFloatArraysAreClose(testCase.FirstLayerAttnSubNorm.Values.ToArray(), actual.Span.ToArray(), 1e-6f, $"token {testCase.TokenId} ({testCase.TokenText})");
         }
@@ -111,7 +111,7 @@ namespace BitNetSharp.Tests
 
             node.Init();
             node.Forward(context);
-            Memory<float> actual = context.AttentionOutput;
+            Memory<float> actual = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(context.AttentionOutput);
 
             AssertFloatArraysAreClose(testCase.FirstLayerAttnOutput.Values.ToArray(), actual.Span.ToArray(), 1e-4f, $"token {testCase.TokenId} ({testCase.TokenText})");
         }
@@ -141,8 +141,8 @@ namespace BitNetSharp.Tests
             singleThreadLayer.Forward(singleThreadContext);
             multiThreadLayer.Forward(multiThreadContext);
 
-            AssertFloatArraysAreClose(singleThreadContext.AttentionSubNorm.Span.ToArray(), multiThreadContext.AttentionSubNorm.Span.ToArray(), 1e-6f, $"{backend} attention sub-norm threading");
-            AssertFloatArraysAreClose(singleThreadContext.AttentionOutput.Span.ToArray(), multiThreadContext.AttentionOutput.Span.ToArray(), 1e-4f, $"{backend} attention output threading");
+            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadContext.AttentionSubNorm).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadContext.AttentionSubNorm).Span.ToArray(), 1e-6f, $"{backend} attention sub-norm threading");
+            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadContext.AttentionOutput).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadContext.AttentionOutput).Span.ToArray(), 1e-4f, $"{backend} attention output threading");
         }
 
         [TestMethod]
@@ -173,8 +173,8 @@ namespace BitNetSharp.Tests
             cachedNode.Forward(cachedContext);
 
             Assert.IsTrue(cachedNode.EnableCache);
-            AssertFloatArraysAreClose(uncachedContext.AttentionSubNorm.Span.ToArray(), cachedContext.AttentionSubNorm.Span.ToArray(), 0f, "attention sub-norm cache");
-            AssertFloatArraysAreClose(uncachedContext.AttentionOutput.Span.ToArray(), cachedContext.AttentionOutput.Span.ToArray(), 0f, "attention output cache");
+            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(uncachedContext.AttentionSubNorm).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(cachedContext.AttentionSubNorm).Span.ToArray(), 0f, "attention sub-norm cache");
+            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(uncachedContext.AttentionOutput).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(cachedContext.AttentionOutput).Span.ToArray(), 0f, "attention output cache");
         }
 
         public static IEnumerable<object[]> GetAttentionCaseIndices()
@@ -198,9 +198,9 @@ namespace BitNetSharp.Tests
 
         private static void SetProjection(global::BitNetSharp.BitNetSession session, AttentionCase testCase)
         {
-            session.QKVQuery = testCase.FirstLayerAttnQKV.WQKV.Query.ToArray();
-            session.QKVKey = testCase.FirstLayerAttnQKV.WQKV.Key.ToArray();
-            session.QKVValue = testCase.FirstLayerAttnQKV.WQKV.Value.ToArray();
+            session.QKVQuery.CopyFrom<float>(testCase.FirstLayerAttnQKV.WQKV.Query.ToArray());
+            session.QKVKey.CopyFrom<float>(testCase.FirstLayerAttnQKV.WQKV.Key.ToArray());
+            session.QKVValue.CopyFrom<float>(testCase.FirstLayerAttnQKV.WQKV.Value.ToArray());
         }
 
         private static void AssertFloatArraysAreClose(IReadOnlyList<float> expected, IReadOnlyList<float> actual, float delta, string caseName)

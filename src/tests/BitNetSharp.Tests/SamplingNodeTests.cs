@@ -64,7 +64,7 @@ namespace BitNetSharp.Tests
             SamplingCase testCase = GetSamplingCase(DebugCaseIndex);
             var step = new BitNetSharp.Nodes.SamplingNode();
             var session = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            testCase.LmHead.Logits.CopyTo(session.Logits.Span);
+            testCase.LmHead.Logits.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.Logits).Span);
 
             Assert.ThrowsExactly<InvalidOperationException>(() => step.Forward(session));
         }
@@ -75,11 +75,11 @@ namespace BitNetSharp.Tests
             using var model = TestModelFactory.LoadModel();
             var step = new BitNetSharp.Nodes.SamplingNode(topK: 3, enableSampling: true, randomSeed: 123);
             var session = TestModelFactory.CreateSession(model, token: 0);
-            session.Logits.Span.Fill(float.NegativeInfinity);
-            session.Logits.Span[0] = 1f;
-            session.Logits.Span[1] = 5f;
-            session.Logits.Span[2] = 4f;
-            session.Logits.Span[3] = 3f;
+            BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.Logits).Span.Fill(float.NegativeInfinity);
+            BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.Logits).Span[0] = 1f;
+            BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.Logits).Span[1] = 5f;
+            BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.Logits).Span[2] = 4f;
+            BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.Logits).Span[3] = 3f;
 
             step.Init();
             step.Forward(session);
@@ -96,12 +96,12 @@ namespace BitNetSharp.Tests
             var step = new BitNetSharp.Nodes.SamplingNode(topK: 3, enableSampling: true, randomSeed: 123, temperature: 0.8f, topP: 0.95f, minP: 0f);
             var firstSession = TestModelFactory.CreateSession(model, token: 0);
             var secondSession = TestModelFactory.CreateSession(model, token: 0);
-            firstSession.Logits.Span.Fill(float.NegativeInfinity);
-            secondSession.Logits.Span.Fill(float.NegativeInfinity);
+            BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(firstSession.Logits).Span.Fill(float.NegativeInfinity);
+            BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(secondSession.Logits).Span.Fill(float.NegativeInfinity);
             for (int index = 0; index < 3; index++)
             {
-                firstSession.Logits.Span[index] = 3 - index;
-                secondSession.Logits.Span[index] = 3 - index;
+                BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(firstSession.Logits).Span[index] = 3 - index;
+                BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(secondSession.Logits).Span[index] = 3 - index;
             }
 
             step.Init();
@@ -119,9 +119,9 @@ namespace BitNetSharp.Tests
             using var model = TestModelFactory.LoadModel();
             using var session = TestModelFactory.CreateSession(model, token: 1);
             session.AppendToken(1);
-            session.Logits.Span.Fill(float.NegativeInfinity);
-            session.Logits.Span[1] = 5f;
-            session.Logits.Span[2] = 4.9f;
+            BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.Logits).Span.Fill(float.NegativeInfinity);
+            BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.Logits).Span[1] = 5f;
+            BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.Logits).Span[2] = 4.9f;
             var step = new BitNetSharp.Nodes.SamplingNode(topK: 2, enableSampling: false, repeatLastN: 64, repeatPenalty: 2.0f);
 
             step.Init();
@@ -144,7 +144,7 @@ namespace BitNetSharp.Tests
             SamplingCase testCase = GetSamplingCase(caseIndex);
             var step = new BitNetSharp.Nodes.SamplingNode(testCase.LmHead.TopKTokenIds.Length);
             var session = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            testCase.LmHead.Logits.CopyTo(session.Logits.Span);
+            testCase.LmHead.Logits.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.Logits).Span);
 
             step.Init();
             step.Forward(session);

@@ -72,13 +72,13 @@ namespace BitNetSharp.Tests
                 model,
                 inferenceConfig: TestInferenceConfigs.Create(backend, 1));
             var session = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            testCase.FirstLayerFfn.FeedForwardInput.CopyTo(session.FeedForwardInput.Span);
-            testCase.FirstLayerFfn.FeedForwardDown.CopyTo(session.FeedForwardOutput.Span);
+            testCase.FirstLayerFfn.FeedForwardInput.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.FeedForwardInput).Span);
+            testCase.FirstLayerFfn.FeedForwardDown.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.FeedForwardOutput).Span);
 
             node.Init();
             node.Forward(session);
 
-            AssertFloatArraysAreClose(testCase.FirstLayerFfn.LayerOutput, session.Embedding.Span.ToArray(), 1e-4f, $"token {testCase.TokenId} ({testCase.TokenText})");
+            AssertFloatArraysAreClose(testCase.FirstLayerFfn.LayerOutput, BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.Embedding).Span.ToArray(), 1e-4f, $"token {testCase.TokenId} ({testCase.TokenText})");
         }
 
         private static void VerifyFeedForwardResidualMultiThreadMatchesSingleThread(string backend)
@@ -93,17 +93,17 @@ namespace BitNetSharp.Tests
                 inferenceConfig: TestInferenceConfigs.Create(backend, 2));
             var singleThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             var multiThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            testCase.FirstLayerFfn.FeedForwardInput.CopyTo(singleThreadSession.FeedForwardInput.Span);
-            testCase.FirstLayerFfn.FeedForwardInput.CopyTo(multiThreadSession.FeedForwardInput.Span);
-            testCase.FirstLayerFfn.FeedForwardDown.CopyTo(singleThreadSession.FeedForwardOutput.Span);
-            testCase.FirstLayerFfn.FeedForwardDown.CopyTo(multiThreadSession.FeedForwardOutput.Span);
+            testCase.FirstLayerFfn.FeedForwardInput.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadSession.FeedForwardInput).Span);
+            testCase.FirstLayerFfn.FeedForwardInput.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadSession.FeedForwardInput).Span);
+            testCase.FirstLayerFfn.FeedForwardDown.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadSession.FeedForwardOutput).Span);
+            testCase.FirstLayerFfn.FeedForwardDown.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadSession.FeedForwardOutput).Span);
 
             singleThreadNode.Init();
             multiThreadNode.Init();
             singleThreadNode.Forward(singleThreadSession);
             multiThreadNode.Forward(multiThreadSession);
 
-            AssertFloatArraysAreClose(singleThreadSession.Embedding.Span.ToArray(), multiThreadSession.Embedding.Span.ToArray(), 1e-4f, $"{backend} feed-forward residual threading");
+            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadSession.Embedding).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadSession.Embedding).Span.ToArray(), 1e-4f, $"{backend} feed-forward residual threading");
         }
 
         private static FeedForwardResidualVectorsDocument LoadFeedForwardResidualVectorsDocument()

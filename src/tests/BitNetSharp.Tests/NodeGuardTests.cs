@@ -113,7 +113,7 @@ namespace BitNetSharp.Tests
 
             var rmsNormNode = new BitNetSharp.Nodes.RmsNormNode(model, model.GetLayer(0).AttentionNorm, inferenceConfig: TestInferenceConfigs.Cpu(1));
             var rmsNormSession = TestModelFactory.CreateSession(model, token: 0);
-            rmsNormSession.Embedding = new float[(int)model.Config!.EmbeddingLength];
+            rmsNormSession.Embedding.CopyFrom<float>(new float[(int)model.Config!.EmbeddingLength]);
             Assert.ThrowsExactly<InvalidOperationException>(() => rmsNormNode.Forward(rmsNormSession));
 
             var qkvNode = new BitNetSharp.Nodes.QKVProjectionNode(
@@ -123,7 +123,7 @@ namespace BitNetSharp.Tests
                 model.GetLayer(0).AttentionValueWeight,
                 inferenceConfig: TestInferenceConfigs.Cpu(1));
             var qkvSession = TestModelFactory.CreateSession(model, token: 0);
-            qkvSession.RmsNorm = new float[(int)model.Config.EmbeddingLength];
+            qkvSession.RmsNorm.CopyFrom<float>(new float[(int)model.Config.EmbeddingLength]);
             Assert.ThrowsExactly<InvalidOperationException>(() => qkvNode.Forward(qkvSession));
 
             AttentionCase attentionCase = AttentionVectorsDocumentCache.Value.TestCases[0];
@@ -133,15 +133,15 @@ namespace BitNetSharp.Tests
                 model.GetLayer(0).AttentionOutputWeight,
                 inferenceConfig: TestInferenceConfigs.Cpu(1));
             var attentionSession = TestModelFactory.CreateSession(model, token: attentionCase.TokenId);
-            attentionSession.QKVQuery = attentionCase.FirstLayerAttnQKV.WQKV.Query.ToArray();
-            attentionSession.QKVKey = attentionCase.FirstLayerAttnQKV.WQKV.Key.ToArray();
-            attentionSession.QKVValue = attentionCase.FirstLayerAttnQKV.WQKV.Value.ToArray();
+            attentionSession.QKVQuery.CopyFrom<float>(attentionCase.FirstLayerAttnQKV.WQKV.Query.ToArray());
+            attentionSession.QKVKey.CopyFrom<float>(attentionCase.FirstLayerAttnQKV.WQKV.Key.ToArray());
+            attentionSession.QKVValue.CopyFrom<float>(attentionCase.FirstLayerAttnQKV.WQKV.Value.ToArray());
             Assert.ThrowsExactly<InvalidOperationException>(() => attentionNode.Forward(attentionSession));
 
             FeedForwardNormCase feedForwardNormCase = FeedForwardNormVectorsDocumentCache.Value.TestCases[0];
             var feedForwardNormNode = new BitNetSharp.Nodes.FeedForwardNormNode(model, model.GetLayer(0).FeedForwardNorm, inferenceConfig: TestInferenceConfigs.Cpu(1));
             var feedForwardNormSession = TestModelFactory.CreateSession(model, token: feedForwardNormCase.TokenId);
-            feedForwardNormCase.FirstLayerFfn.FeedForwardInput.CopyTo(feedForwardNormSession.FeedForwardInput.Span);
+            feedForwardNormCase.FirstLayerFfn.FeedForwardInput.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(feedForwardNormSession.FeedForwardInput).Span);
             Assert.ThrowsExactly<InvalidOperationException>(() => feedForwardNormNode.Forward(feedForwardNormSession));
 
             FeedForwardCase feedForwardCase = FeedForwardVectorsDocumentCache.Value.TestCases[0];
@@ -153,33 +153,33 @@ namespace BitNetSharp.Tests
                 model.GetLayer(0).FeedForwardDownWeight,
                 inferenceConfig: TestInferenceConfigs.Cpu(1));
             var feedForwardSession = TestModelFactory.CreateSession(model, token: feedForwardCase.TokenId);
-            feedForwardCase.FirstLayerFfn.FeedForwardNorm.CopyTo(feedForwardSession.FeedForwardNorm.Span);
+            feedForwardCase.FirstLayerFfn.FeedForwardNorm.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(feedForwardSession.FeedForwardNorm).Span);
             Assert.ThrowsExactly<InvalidOperationException>(() => feedForwardNode.Forward(feedForwardSession));
 
             FinalNormCase finalNormCase = FinalNormVectorsDocumentCache.Value.TestCases[0];
             var finalNormNode = new BitNetSharp.Nodes.FinalNormNode(model, inferenceConfig: TestInferenceConfigs.Cpu(1));
             var finalNormSession = TestModelFactory.CreateSession(model, token: finalNormCase.TokenId);
-            finalNormCase.FinalNormInput.Values.CopyTo(finalNormSession.Embedding.Span);
+            finalNormCase.FinalNormInput.Values.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(finalNormSession.Embedding).Span);
             Assert.ThrowsExactly<InvalidOperationException>(() => finalNormNode.Forward(finalNormSession));
 
             LmHeadCase lmHeadCase = LmHeadVectorsDocumentCache.Value.TestCases[0];
             var lmHeadNode = new BitNetSharp.Nodes.LmHeadNode(model, inferenceConfig: TestInferenceConfigs.Cpu(1));
             var lmHeadSession = TestModelFactory.CreateSession(model, token: lmHeadCase.TokenId);
-            lmHeadCase.FinalNormOutput.Values.CopyTo(lmHeadSession.FinalNormOutput.Span);
+            lmHeadCase.FinalNormOutput.Values.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(lmHeadSession.FinalNormOutput).Span);
             Assert.ThrowsExactly<InvalidOperationException>(() => lmHeadNode.Forward(lmHeadSession));
 
             ResidualCase residualCase = ResidualVectorsDocumentCache.Value.TestCases[0];
             var residualNode = new BitNetSharp.Nodes.ResidualNode(model, inferenceConfig: TestInferenceConfigs.Cpu(1));
             var residualSession = TestModelFactory.CreateSession(model, token: residualCase.TokenId);
-            residualSession.Embedding = residualCase.Dequantized.Values.ToArray();
-            residualSession.AttentionOutput = residualCase.FirstLayerAttnOutput.Values.ToArray();
+            residualSession.Embedding.CopyFrom<float>(residualCase.Dequantized.Values.ToArray());
+            residualSession.AttentionOutput.CopyFrom<float>(residualCase.FirstLayerAttnOutput.Values.ToArray());
             Assert.ThrowsExactly<InvalidOperationException>(() => residualNode.Forward(residualSession));
 
             FeedForwardResidualCase feedForwardResidualCase = FeedForwardResidualVectorsDocumentCache.Value.TestCases[0];
             var feedForwardResidualNode = new BitNetSharp.Nodes.FeedForwardResidualNode(model, inferenceConfig: TestInferenceConfigs.Cpu(1));
             var feedForwardResidualSession = TestModelFactory.CreateSession(model, token: feedForwardResidualCase.TokenId);
-            feedForwardResidualCase.FirstLayerFfn.FeedForwardInput.CopyTo(feedForwardResidualSession.FeedForwardInput.Span);
-            feedForwardResidualCase.FirstLayerFfn.FeedForwardDown.CopyTo(feedForwardResidualSession.FeedForwardOutput.Span);
+            feedForwardResidualCase.FirstLayerFfn.FeedForwardInput.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(feedForwardResidualSession.FeedForwardInput).Span);
+            feedForwardResidualCase.FirstLayerFfn.FeedForwardDown.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(feedForwardResidualSession.FeedForwardOutput).Span);
             Assert.ThrowsExactly<InvalidOperationException>(() => feedForwardResidualNode.Forward(feedForwardResidualSession));
         }
 

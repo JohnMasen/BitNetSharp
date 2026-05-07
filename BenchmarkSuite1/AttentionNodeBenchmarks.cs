@@ -30,9 +30,9 @@ public class AttentionNodeBenchmarks
         model.Load(BenchmarkProjectPaths.ModelPath);
         var layerDefinition = model.GetLayer(0);
         session = new BitNetSession(model, memoryManager, new[] { 0 });
-        BenchmarkDataHelper.FillDeterministicValues(session.QKVQuery.Span, 23);
-        BenchmarkDataHelper.FillDeterministicValues(session.QKVKey.Span, 29);
-        BenchmarkDataHelper.FillDeterministicValues(session.QKVValue.Span, 31);
+        BenchmarkDataHelper.FillDeterministicValues(RuntimeTensorBufferExtensions.GetMemory<float>(session.QKVQuery).Span, 23);
+        BenchmarkDataHelper.FillDeterministicValues(RuntimeTensorBufferExtensions.GetMemory<float>(session.QKVKey).Span, 29);
+        BenchmarkDataHelper.FillDeterministicValues(RuntimeTensorBufferExtensions.GetMemory<float>(session.QKVValue).Span, 31);
         cpuSingleThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Cpu(1));
         cpuMultiThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Cpu(InferenceConfig.AutoThreadCount));
         tensorSingleThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Tensor(1));
@@ -111,6 +111,6 @@ public class AttentionNodeBenchmarks
     private (Memory<float> SubNorm, Memory<float> Output) Run(AttentionNode node)
     {
         node.Forward(session!);
-        return (session!.AttentionSubNorm, session.AttentionOutput);
+        return (RuntimeTensorBufferExtensions.GetMemory<float>(session!.AttentionSubNorm), RuntimeTensorBufferExtensions.GetMemory<float>(session.AttentionOutput));
     }
 }

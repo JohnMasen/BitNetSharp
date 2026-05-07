@@ -53,6 +53,7 @@
 - For this repo's runtime design, `RuntimeTensor` should support copying data in from `Memory<T>` for CPU-origin initialization. The user prefers `Session` to create tensors via its internal `MemoryManager`, while multiple sessions should share a single immutable weight copy instead of duplicating model weights per session.
 - Defer optimization work for the current RuntimeTensor/IOPProvider performance regression for now; revisit later with architecture simplification aimed at reducing lookup overhead such as extra list/dictionary access.
 - **In this repo, retain the current static allocation strategy for token/KV cache; do not alter the overall architecture for dynamic expansion on CPU, as future GPU/NPU devices may not support dynamic memory expansion.**
+- For this repo, `BitNetMemoryManager` should expose `RuntimeTensorLease` instead of directly returning `Memory<T>` so the memory abstraction can support future GPU/NPU backends.
 
 ## QKV Parallel Work Instructions
 - For QKV parallel work, `ThreadHelper` should support optional block-aligned splitting. Default splitting should not enforce alignment; only SIMD callers should pass an alignment parameter based on the required data byte length.

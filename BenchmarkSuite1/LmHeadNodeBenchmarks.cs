@@ -1,5 +1,6 @@
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Order;
+using BitNetSharp.Core;
 using BitNetSharp.Models;
 using BitNetSharp.Nodes;
 using Microsoft.VSDiagnostics;
@@ -31,7 +32,7 @@ public class LmHeadNodeBenchmarks
         model.Load(BenchmarkProjectPaths.ModelPath);
 
         session = new BitNetSession(model, memoryManager, new[] { 0 });
-        BenchmarkDataHelper.FillDeterministicValues(session.FinalNormOutput.Span, 19);
+        BenchmarkDataHelper.FillDeterministicValues(RuntimeTensorBufferExtensions.GetMemory<float>(session.FinalNormOutput).Span, 19);
 
         cpuSingleThreadNode = CreateNode(BenchmarkInferenceConfigs.Cpu(1));
         cpuMultiThreadNode = CreateNode(BenchmarkInferenceConfigs.Cpu(InferenceConfig.AutoThreadCount));
@@ -107,7 +108,7 @@ public class LmHeadNodeBenchmarks
     private Memory<float> Run(LmHeadNode node)
     {
         node.Forward(session!);
-        return session!.Logits;
+        return RuntimeTensorBufferExtensions.GetMemory<float>(session!.Logits);
     }
 
 }

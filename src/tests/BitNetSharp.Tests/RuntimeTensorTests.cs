@@ -79,7 +79,7 @@ namespace BitNetSharp.Tests
 
             Assert.IsTrue(hasBuffer);
             CollectionAssert.AreEqual(values, buffer.ToArray());
-            CollectionAssert.AreEqual(values, session.Embedding.ToArray());
+            CollectionAssert.AreEqual(values, BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.Embedding).ToArray());
         }
 
         [TestMethod]

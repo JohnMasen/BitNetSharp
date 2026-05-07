@@ -101,8 +101,8 @@ namespace BitNetSharp.Tests
                 inferenceConfig: TestInferenceConfigs.Cpu(1));
             var uncachedSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             var cachedSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            testCase.FirstLayerFfn.FeedForwardNorm.CopyTo(uncachedSession.FeedForwardNorm.Span);
-            testCase.FirstLayerFfn.FeedForwardNorm.CopyTo(cachedSession.FeedForwardNorm.Span);
+            testCase.FirstLayerFfn.FeedForwardNorm.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(uncachedSession.FeedForwardNorm).Span);
+            testCase.FirstLayerFfn.FeedForwardNorm.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(cachedSession.FeedForwardNorm).Span);
 
             uncachedNode.Init();
             cachedNode.Init();
@@ -110,8 +110,8 @@ namespace BitNetSharp.Tests
             cachedNode.Forward(cachedSession);
 
             Assert.IsTrue(cachedNode.EnableCache);
-            AssertFloatArraysAreClose(uncachedSession.FeedForwardSubNorm.Span.ToArray(), cachedSession.FeedForwardSubNorm.Span.ToArray(), 0f, "feed-forward sub-norm cache");
-            AssertFloatArraysAreClose(uncachedSession.FeedForwardOutput.Span.ToArray(), cachedSession.FeedForwardOutput.Span.ToArray(), 0f, "feed-forward output cache");
+            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(uncachedSession.FeedForwardSubNorm).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(cachedSession.FeedForwardSubNorm).Span.ToArray(), 0f, "feed-forward sub-norm cache");
+            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(uncachedSession.FeedForwardOutput).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(cachedSession.FeedForwardOutput).Span.ToArray(), 0f, "feed-forward output cache");
         }
 
         public static IEnumerable<object[]> GetFeedForwardCaseIndices()
@@ -135,12 +135,12 @@ namespace BitNetSharp.Tests
                 layerDefinition.FeedForwardDownWeight,
                 inferenceConfig: TestInferenceConfigs.Create(backend, 1));
             var session = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            testCase.FirstLayerFfn.FeedForwardNorm.CopyTo(session.FeedForwardNorm.Span);
+            testCase.FirstLayerFfn.FeedForwardNorm.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.FeedForwardNorm).Span);
 
             node.Init();
             node.Forward(session);
 
-            AssertFloatArraysAreClose(testCase.FirstLayerFfn.FeedForwardSubNorm, session.FeedForwardSubNorm.Span.ToArray(), 1e-4f, $"token {testCase.TokenId} ({testCase.TokenText})");
+            AssertFloatArraysAreClose(testCase.FirstLayerFfn.FeedForwardSubNorm, BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.FeedForwardSubNorm).Span.ToArray(), 1e-4f, $"token {testCase.TokenId} ({testCase.TokenText})");
         }
 
         private static void VerifyFeedForwardOutputMatchesBaseline(int caseIndex, string backend)
@@ -156,12 +156,12 @@ namespace BitNetSharp.Tests
                 layerDefinition.FeedForwardDownWeight,
                 inferenceConfig: TestInferenceConfigs.Create(backend, 1));
             var session = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            testCase.FirstLayerFfn.FeedForwardNorm.CopyTo(session.FeedForwardNorm.Span);
+            testCase.FirstLayerFfn.FeedForwardNorm.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.FeedForwardNorm).Span);
 
             node.Init();
             node.Forward(session);
 
-            AssertFloatArraysAreClose(testCase.FirstLayerFfn.FeedForwardDown, session.FeedForwardOutput.Span.ToArray(), 1e-3f, $"token {testCase.TokenId} ({testCase.TokenText})");
+            AssertFloatArraysAreClose(testCase.FirstLayerFfn.FeedForwardDown, BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.FeedForwardOutput).Span.ToArray(), 1e-3f, $"token {testCase.TokenId} ({testCase.TokenText})");
         }
 
         private static void VerifyFeedForwardMultiThreadMatchesSingleThread(string backend)
@@ -185,16 +185,16 @@ namespace BitNetSharp.Tests
                 inferenceConfig: TestInferenceConfigs.Create(backend, 2));
             var singleThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             var multiThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            testCase.FirstLayerFfn.FeedForwardNorm.CopyTo(singleThreadSession.FeedForwardNorm.Span);
-            testCase.FirstLayerFfn.FeedForwardNorm.CopyTo(multiThreadSession.FeedForwardNorm.Span);
+            testCase.FirstLayerFfn.FeedForwardNorm.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadSession.FeedForwardNorm).Span);
+            testCase.FirstLayerFfn.FeedForwardNorm.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadSession.FeedForwardNorm).Span);
 
             singleThreadNode.Init();
             multiThreadNode.Init();
             singleThreadNode.Forward(singleThreadSession);
             multiThreadNode.Forward(multiThreadSession);
 
-            AssertFloatArraysAreClose(singleThreadSession.FeedForwardSubNorm.Span.ToArray(), multiThreadSession.FeedForwardSubNorm.Span.ToArray(), 1e-4f, $"{backend} feed-forward sub-norm threading");
-            AssertFloatArraysAreClose(singleThreadSession.FeedForwardOutput.Span.ToArray(), multiThreadSession.FeedForwardOutput.Span.ToArray(), 1e-3f, $"{backend} feed-forward output threading");
+            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadSession.FeedForwardSubNorm).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadSession.FeedForwardSubNorm).Span.ToArray(), 1e-4f, $"{backend} feed-forward sub-norm threading");
+            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadSession.FeedForwardOutput).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadSession.FeedForwardOutput).Span.ToArray(), 1e-3f, $"{backend} feed-forward output threading");
         }
 
         private static FeedForwardVectorsDocument LoadFeedForwardVectorsDocument()

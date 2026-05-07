@@ -32,8 +32,8 @@ public class ResidualNodeBenchmarks
         model.Load(BenchmarkProjectPaths.ModelPath);
 
         session = new BitNetSession(model, memoryManager, new[] { 0 });
-        BenchmarkDataHelper.FillDeterministicValues(session.Embedding.Span, 37);
-        BenchmarkDataHelper.FillDeterministicValues(session.AttentionOutput.Span, 41);
+        BenchmarkDataHelper.FillDeterministicValues(RuntimeTensorBufferExtensions.GetMemory<float>(session.Embedding).Span, 37);
+        BenchmarkDataHelper.FillDeterministicValues(RuntimeTensorBufferExtensions.GetMemory<float>(session.AttentionOutput).Span, 41);
 
         cpuSingleThreadNode = CreateNode(BenchmarkInferenceConfigs.Cpu(1));
         cpuMultiThreadNode = CreateNode(BenchmarkInferenceConfigs.Cpu(InferenceConfig.AutoThreadCount));
@@ -106,6 +106,6 @@ public class ResidualNodeBenchmarks
     private Memory<float> Run(ResidualNode node)
     {
         node.Forward(session!);
-        return session!.FeedForwardInput;
+        return RuntimeTensorBufferExtensions.GetMemory<float>(session!.FeedForwardInput);
     }
 }

@@ -164,9 +164,9 @@ namespace BitNetSharp.Tests
             (byte[] PackedWeights, float Scale) outputWeights = ReadPackedWeights(model, layer.AttentionOutputWeight, "Packed attention");
             float[] outputScaleValues = layer.AttentionOutputScale is null ? [] : ReadFloatTensor(model, layer.AttentionOutputScale, "Attention output scale");
             float[] outputBiasValues = layer.AttentionOutputBias is null ? [] : ReadFloatTensor(model, layer.AttentionOutputBias, "Attention output bias");
-            ReadOnlyMemory<float> query = session.QKVQuery;
-            ReadOnlyMemory<float> key = session.QKVKey;
-            ReadOnlyMemory<float> value = session.QKVValue;
+            ReadOnlyMemory<float> query = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetReadOnlyMemory<float>(session.QKVQuery);
+            ReadOnlyMemory<float> key = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetReadOnlyMemory<float>(session.QKVKey);
+            ReadOnlyMemory<float> value = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetReadOnlyMemory<float>(session.QKVValue);
             RuntimeTensor subNorm = session.AttentionSubNormTensor;
             RuntimeTensor output = session.AttentionOutputTensor;
 

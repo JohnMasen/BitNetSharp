@@ -62,7 +62,7 @@ namespace BitNetSharp.Tests
             BitNetSharp.Nodes.LmHeadNode lmHeadNode = GetPrivateField<BitNetSharp.Nodes.LmHeadNode>(runtime, "lmHeadNode");
 
             embeddingNode.Forward(session);
-            AssertVectorPrefix("embedding_output", FullDumpBaseline.ReadFloatValues("embedding_output_first_32"), session.Embedding.Span);
+            AssertVectorPrefix("embedding_output", FullDumpBaseline.ReadFloatValues("embedding_output_first_32"), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.Embedding).Span);
 
             for (int layerIndex = 0; layerIndex < model.Layers.Count; layerIndex++)
             {
@@ -71,17 +71,17 @@ namespace BitNetSharp.Tests
                 attentionNormNodes[layerIndex].Forward(session);
                 if (layerIndex == 0)
                 {
-                    AssertVectorPrefix("first_layer_attention_norm_output", FullDumpBaseline.ReadFloatValues("first_layer_attention_norm_output_first_32"), session.RmsNorm.Span);
+                    AssertVectorPrefix("first_layer_attention_norm_output", FullDumpBaseline.ReadFloatValues("first_layer_attention_norm_output_first_32"), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.RmsNorm).Span);
                 }
 
                 InvokePrivateMethod(runtime, "ExecuteQKVProjection", session, layerIndex, layer);
                 if (layerIndex == 0)
                 {
-                    AssertVectorPrefix("first_layer_qkv_query_output", FullDumpBaseline.ReadFloatValues("first_layer_qcur_before_rope_first_32"), session.QKVQuery.Span);
-                    AssertVectorPrefix("first_layer_qkv_key_output", FullDumpBaseline.ReadFloatValues("first_layer_kcur_before_rope_first_32"), session.QKVKey.Span);
-                    AssertVectorPrefix("first_layer_qkv_value_output", FullDumpBaseline.ReadFloatValues("first_layer_vcur_first_32"), session.QKVValue.Span);
-                    AssertVectorPrefix("qcur_before_rope", FullDumpBaseline.ReadFloatValues("first_layer_qcur_before_rope_first_32"), session.QKVQuery.Span);
-                    AssertVectorPrefix("kcur_before_rope", FullDumpBaseline.ReadFloatValues("first_layer_kcur_before_rope_first_32"), session.QKVKey.Span);
+                    AssertVectorPrefix("first_layer_qkv_query_output", FullDumpBaseline.ReadFloatValues("first_layer_qcur_before_rope_first_32"), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.QKVQuery).Span);
+                    AssertVectorPrefix("first_layer_qkv_key_output", FullDumpBaseline.ReadFloatValues("first_layer_kcur_before_rope_first_32"), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.QKVKey).Span);
+                    AssertVectorPrefix("first_layer_qkv_value_output", FullDumpBaseline.ReadFloatValues("first_layer_vcur_first_32"), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.QKVValue).Span);
+                    AssertVectorPrefix("qcur_before_rope", FullDumpBaseline.ReadFloatValues("first_layer_qcur_before_rope_first_32"), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.QKVQuery).Span);
+                    AssertVectorPrefix("kcur_before_rope", FullDumpBaseline.ReadFloatValues("first_layer_kcur_before_rope_first_32"), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.QKVKey).Span);
 
                     int embeddingLength = checked((int)model.Config!.EmbeddingLength);
                     int headCount = checked((int)model.Config.AttentionHeadCount);
@@ -91,16 +91,16 @@ namespace BitNetSharp.Tests
                     int ropeDimensionCount = checked((int)model.Config.RopeDimensionCount);
                     float ropeFrequencyBase = model.Config.RopeFrequencyBase;
                     int positionIndex = session.CacheWritePosition;
-                    float[] ropeQueryValues = ApplyRopeForTest(session.QKVQuery.Span, positionIndex, headCount, headDimension, ropeDimensionCount, ropeFrequencyBase);
-                    float[] ropeKeyValues = ApplyRopeForTest(session.QKVKey.Span, positionIndex, keyValueHeadCount, headDimension, ropeDimensionCount, ropeFrequencyBase);
+                    float[] ropeQueryValues = ApplyRopeForTest(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.QKVQuery).Span, positionIndex, headCount, headDimension, ropeDimensionCount, ropeFrequencyBase);
+                    float[] ropeKeyValues = ApplyRopeForTest(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.QKVKey).Span, positionIndex, keyValueHeadCount, headDimension, ropeDimensionCount, ropeFrequencyBase);
                     ReadOnlyMemory<float> ropeQueryMemory = ropeQueryValues;
                     AssertVectorPrefix("first_layer_qcur_after_rope", FullDumpBaseline.ReadFloatValues("first_layer_qcur_after_rope_first_32"), ropeQueryValues, RopeTolerance);
                     AssertVectorPrefix("first_layer_kcur_after_rope", FullDumpBaseline.ReadFloatValues("first_layer_kcur_after_rope_first_32"), ropeKeyValues, RopeTolerance);
                     AssertVectorPrefix("first_layer_k_before_kv_cache_write", FullDumpBaseline.ReadFloatValues("first_layer_k_before_kv_cache_write_first_32"), ropeKeyValues, RopeTolerance);
-                    AssertVectorPrefix("first_layer_v_before_kv_cache_write", FullDumpBaseline.ReadFloatValues("first_layer_v_before_kv_cache_write_first_32"), session.QKVValue.Span, RopeTolerance);
+                    AssertVectorPrefix("first_layer_v_before_kv_cache_write", FullDumpBaseline.ReadFloatValues("first_layer_v_before_kv_cache_write_first_32"), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.QKVValue).Span, RopeTolerance);
 
                     WriteKeyCacheForTest(session, layerIndex, ropeKeyValues);
-                    WriteValueCacheForTest(session, layerIndex, session.QKVValue.Span, keyValueHeadCount, headDimension);
+                    WriteValueCacheForTest(session, layerIndex, BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.QKVValue).Span, keyValueHeadCount, headDimension);
                     float[] keyCacheReadValues = ReadKeyCachePrefix(session, layerIndex, keyValueHeadCount, headDimension, 32);
                     float[] valueCacheReadValues = ReadValueCachePrefix(session, layerIndex, keyValueHeadCount, headDimension, 32);
                     AssertVectorPrefix("first_layer_k_after_kv_cache_read", FullDumpBaseline.ReadFloatValues("first_layer_k_after_kv_cache_read_first_32"), keyCacheReadValues, KvCacheReadTolerance);
@@ -115,19 +115,19 @@ namespace BitNetSharp.Tests
                 InvokePrivateMethod(runtime, "ExecuteAttention", session, layerIndex, layer, CancellationToken.None);
                 if (layerIndex == 0)
                 {
-                    AssertVectorPrefix("first_layer_attention_output", FullDumpBaseline.ReadFloatValues("first_layer_attn_o_out_0_first_32"), session.AttentionOutput.Span);
+                    AssertVectorPrefix("first_layer_attention_output", FullDumpBaseline.ReadFloatValues("first_layer_attn_o_out_0_first_32"), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.AttentionOutput).Span);
                 }
 
                 residualNodes[layerIndex].Forward(session);
                 if (layerIndex == 0)
                 {
-                    AssertVectorPrefix("first_layer_feedforward_input", FullDumpBaseline.ReadFloatValues("first_layer_feedforward_input_first_32"), session.FeedForwardInput.Span);
+                    AssertVectorPrefix("first_layer_feedforward_input", FullDumpBaseline.ReadFloatValues("first_layer_feedforward_input_first_32"), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.FeedForwardInput).Span);
                 }
 
                 feedForwardNormNodes[layerIndex].Forward(session);
                 if (layerIndex == 0)
                 {
-                    AssertVectorPrefix("first_layer_feedforward_norm_output", FullDumpBaseline.ReadFloatValues("first_layer_feedforward_norm_output_first_32"), session.FeedForwardNorm.Span);
+                    AssertVectorPrefix("first_layer_feedforward_norm_output", FullDumpBaseline.ReadFloatValues("first_layer_feedforward_norm_output_first_32"), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.FeedForwardNorm).Span);
                 }
 
                 if (layerIndex == 0)
@@ -138,23 +138,23 @@ namespace BitNetSharp.Tests
                 InvokePrivateMethod(runtime, "ExecuteFeedForward", session, layerIndex, layer);
                 if (layerIndex == 0)
                 {
-                    AssertVectorPrefix("first_layer_feedforward_sub_norm_output", FullDumpBaseline.ReadFloatValues("first_layer_feedforward_sub_norm_output_first_32"), session.FeedForwardSubNorm.Span);
-                    AssertVectorPrefix("first_layer_feedforward_output", FullDumpBaseline.ReadFloatValues("first_layer_feedforward_down_output_first_32"), session.FeedForwardOutput.Span);
+                    AssertVectorPrefix("first_layer_feedforward_sub_norm_output", FullDumpBaseline.ReadFloatValues("first_layer_feedforward_sub_norm_output_first_32"), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.FeedForwardSubNorm).Span);
+                    AssertVectorPrefix("first_layer_feedforward_output", FullDumpBaseline.ReadFloatValues("first_layer_feedforward_down_output_first_32"), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.FeedForwardOutput).Span);
                 }
 
                 feedForwardResidualNodes[layerIndex].Forward(session);
                 if (layerIndex == 0)
                 {
-                    AssertVectorPrefix("first_layer_feedforward_output_runtime_semantic", FullDumpBaseline.ReadFloatValues("first_layer_feedforward_output_runtime_semantic_first_32"), session.Embedding.Span);
+                    AssertVectorPrefix("first_layer_feedforward_output_runtime_semantic", FullDumpBaseline.ReadFloatValues("first_layer_feedforward_output_runtime_semantic_first_32"), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.Embedding).Span);
                 }
             }
 
             finalNormNode.Forward(session);
             AssertPromptTokenIds(prompt, session);
-            AssertVectorPrefix("final_norm_output", FullDumpBaseline.ReadFloatValues("final_norm_output_first_32"), session.FinalNormOutput.Span);
+            AssertVectorPrefix("final_norm_output", FullDumpBaseline.ReadFloatValues("final_norm_output_first_32"), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.FinalNormOutput).Span);
 
             lmHeadNode.Forward(session);
-            AssertVectorPrefix("lm_head_output_logits", FullDumpBaseline.ReadFloatValues("lm_head_output_logits_first_32"), session.Logits.Span);
+            AssertVectorPrefix("lm_head_output_logits", FullDumpBaseline.ReadFloatValues("lm_head_output_logits_first_32"), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.Logits).Span);
         }
 
         private static void VerifyStandaloneFeedForwardNode(Models.BitNetModel model, Models.BitNetLayerDefinition layer, BitNetSession session)
@@ -166,7 +166,7 @@ namespace BitNetSharp.Tests
         {
             using var standaloneMemoryManager = new BitNetMemoryManager();
             using var standaloneSession = new BitNetSession(model, standaloneMemoryManager);
-            session.FeedForwardNorm.Span.CopyTo(standaloneSession.FeedForwardNorm.Span);
+            BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.FeedForwardNorm).Span.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(standaloneSession.FeedForwardNorm).Span);
 
             var node = new FeedForwardNode(
                 model,
@@ -179,9 +179,9 @@ namespace BitNetSharp.Tests
             node.Init();
             node.Forward(standaloneSession);
 
-            AssertVectorPrefix("standalone_feedforward_sub_norm_output", FullDumpBaseline.ReadFloatValues("first_layer_feedforward_sub_norm_output_first_32"), standaloneSession.FeedForwardSubNorm.Span);
-            AssertVectorPrefix(outputVectorName, FullDumpBaseline.ReadFloatValues("first_layer_feedforward_down_output_first_32"), standaloneSession.FeedForwardOutput.Span);
-            return standaloneSession.FeedForwardOutput.Span.ToArray();
+            AssertVectorPrefix("standalone_feedforward_sub_norm_output", FullDumpBaseline.ReadFloatValues("first_layer_feedforward_sub_norm_output_first_32"), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(standaloneSession.FeedForwardSubNorm).Span);
+            AssertVectorPrefix(outputVectorName, FullDumpBaseline.ReadFloatValues("first_layer_feedforward_down_output_first_32"), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(standaloneSession.FeedForwardOutput).Span);
+            return BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(standaloneSession.FeedForwardOutput).Span.ToArray();
         }
 
         private static void AssertPromptTokenIds(FullDumpBaseline.FullDumpPrompt prompt, BitNetSession session)

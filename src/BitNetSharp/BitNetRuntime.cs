@@ -464,9 +464,9 @@ namespace BitNetSharp
             int headCount = checked((int)model.Config.AttentionHeadCount);
             int keyValueHeadCount = checked((int)model.Config.AttentionKeyValueHeadCount);
             int headDimension = checked((int)model.Config.AttentionHeadDimension);
-            ReadOnlyMemory<float> query = activeSession.QKVQuery;
-            ReadOnlyMemory<float> key = activeSession.QKVKey;
-            ReadOnlyMemory<float> value = activeSession.QKVValue;
+            ReadOnlyMemory<float> query = activeSession.QKVQuery.GetReadOnlyMemory<float>();
+            ReadOnlyMemory<float> key = activeSession.QKVKey.GetReadOnlyMemory<float>();
+            ReadOnlyMemory<float> value = activeSession.QKVValue.GetReadOnlyMemory<float>();
             using IMemoryOwner<float> ropeQueryOwner = MemoryPool<float>.Shared.Rent(query.Length);
             using IMemoryOwner<float> ropeKeyOwner = MemoryPool<float>.Shared.Rent(key.Length);
             Memory<float> ropeQuery = ropeQueryOwner.Memory[..query.Length];

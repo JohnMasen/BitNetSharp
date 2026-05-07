@@ -125,9 +125,9 @@ namespace BitNetSharp.Nodes
                 throw new InvalidOperationException("Session does not contain complete QKV projection output.");
             }
 
-            ReadOnlyMemory<float> query = session.QKVQuery;
-            ReadOnlyMemory<float> key = session.QKVKey;
-            ReadOnlyMemory<float> value = session.QKVValue;
+            ReadOnlyMemory<float> query = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetReadOnlyMemory<float>(session.QKVQuery);
+            ReadOnlyMemory<float> key = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetReadOnlyMemory<float>(session.QKVKey);
+            ReadOnlyMemory<float> value = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetReadOnlyMemory<float>(session.QKVValue);
             RuntimeTensor subNorm = session.AttentionSubNormTensor;
             RuntimeTensor output = session.AttentionOutputTensor;
             if (EnableCache)

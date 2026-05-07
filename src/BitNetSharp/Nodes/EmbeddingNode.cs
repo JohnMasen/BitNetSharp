@@ -83,7 +83,7 @@ namespace BitNetSharp.Nodes
                 throw new InvalidOperationException("Embedding tensor dimensions do not match the loaded model configuration.");
             }
 
-            Memory<float> embedding = session.Embedding;
+            Memory<float> embedding = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.Embedding);
             int rowOffset = checked(session.CurrentToken * embeddingLength);
 
             if (EnableCache)

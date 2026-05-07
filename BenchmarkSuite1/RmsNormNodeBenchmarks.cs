@@ -30,7 +30,7 @@ public class RmsNormNodeBenchmarks
         model.Load(BenchmarkProjectPaths.ModelPath);
         var normTensor = model.GetLayer(0).AttentionNorm;
         session = new BitNetSession(model, memoryManager, new[] { 0 });
-        BenchmarkDataHelper.FillDeterministicValues(session.Embedding.Span, 2);
+        BenchmarkDataHelper.FillDeterministicValues(RuntimeTensorBufferExtensions.GetMemory<float>(session.Embedding).Span, 2);
         cpuSingleThreadNode = new RmsNormNode(
             model,
             normTensor,
@@ -125,6 +125,6 @@ public class RmsNormNodeBenchmarks
     private Memory<float> Run(RmsNormNode node)
     {
         node.Forward(session!);
-        return session!.RmsNorm;
+        return RuntimeTensorBufferExtensions.GetMemory<float>(session!.RmsNorm);
     }
 }

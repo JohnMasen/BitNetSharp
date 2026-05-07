@@ -33,7 +33,7 @@ public class QKVProjectionNodeBenchmarks
 
         var layerDefinition = model.GetLayer(0);
         session = new BitNetSession(model, memoryManager, new[] { 0 });
-        BenchmarkDataHelper.FillDeterministicValues(session.RmsNorm.Span, 3);
+        BenchmarkDataHelper.FillDeterministicValues(RuntimeTensorBufferExtensions.GetMemory<float>(session.RmsNorm).Span, 3);
 
         cpuSingleThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Cpu(1));
         cpuMultiThreadNode = CreateNode(layerDefinition, BenchmarkInferenceConfigs.Cpu(InferenceConfig.AutoThreadCount));
@@ -112,6 +112,6 @@ public class QKVProjectionNodeBenchmarks
     private (Memory<float> Query, Memory<float> Key, Memory<float> Value) Run(QKVProjectionNode node)
     {
         node.Forward(session!);
-        return (session!.QKVQuery, session.QKVKey, session.QKVValue);
+        return (RuntimeTensorBufferExtensions.GetMemory<float>(session!.QKVQuery), RuntimeTensorBufferExtensions.GetMemory<float>(session.QKVKey), RuntimeTensorBufferExtensions.GetMemory<float>(session.QKVValue));
     }
 }
