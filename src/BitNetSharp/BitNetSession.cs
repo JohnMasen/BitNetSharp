@@ -23,7 +23,6 @@ namespace BitNetSharp
 
         private readonly BitNetModel model;
         private readonly BitNetMemoryManager memoryManager;
-        private readonly Dictionary<string, RuntimeTensorLease> runtimeTensorLeases = new(StringComparer.Ordinal);
         private readonly Dictionary<string, RuntimeTensor> runtimeTensors = new(StringComparer.Ordinal);
         private int currentToken;
         private int currentOutputStartIndex;
@@ -72,12 +71,6 @@ namespace BitNetSharp
                 return;
             }
 
-            foreach (RuntimeTensorLease lease in runtimeTensorLeases.Values)
-            {
-                lease.Dispose();
-            }
-
-            runtimeTensorLeases.Clear();
             runtimeTensors.Clear();
             memoryManager.Release(Id);
             disposed = true;
@@ -301,8 +294,8 @@ namespace BitNetSharp
         {
             ObjectDisposedException.ThrowIf(disposed, this);
 
-            return runtimeTensorLeases.TryGetValue(key, out RuntimeTensorLease? lease)
-                ? GetTensorMemory<T>(lease.Tensor, key)
+            return memoryManager.TryGetMemory<T>(Id, key, out Memory<T> memory)
+                ? memory
                 : Memory<T>.Empty;
         }
 
@@ -350,14 +343,15 @@ namespace BitNetSharp
         private RuntimeTensor CreateRuntimeTensor<T>(string name, int length)
             where T : unmanaged
         {
-            RuntimeTensorLease lease = memoryManager.RequestMemory<T>(Id, name, length);
-            if (runtimeTensorLeases.TryGetValue(name, out RuntimeTensorLease? existingLease))
+            Memory<T> memory = memoryManager.RequestMemory<T>(Id, name, length);
+            RuntimeTensor tensor = RuntimeTensor.CreateWritable(name, memory, [length]);
+
+            if (runtimeTensors.ContainsKey(name))
             {
-                existingLease.Dispose();
+                runtimeTensors[name] = tensor;
             }
 
-            runtimeTensorLeases[name] = lease;
-            return lease.Tensor;
+            return tensor;
         }
 
         private static string CreateLayerCacheTensorName(string prefix, int layerIndex)

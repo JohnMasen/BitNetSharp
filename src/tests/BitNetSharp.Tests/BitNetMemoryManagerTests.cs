@@ -10,12 +10,10 @@ namespace BitNetSharp.Tests
             using var memoryManager = new BitNetMemoryManager();
             Guid sessionId = Guid.NewGuid();
 
-            RuntimeTensorLease bufferLease = memoryManager.RequestMemory<int>(sessionId, "Tokens", 4);
-            Assert.IsTrue(bufferLease.Tensor.TryGet<Memory<int>>(out Memory<int> buffer));
+            Memory<int> buffer = memoryManager.RequestMemory<int>(sessionId, "Tokens", 4);
             buffer.Span[0] = 13;
 
-            RuntimeTensorLease fetchedLease = memoryManager.GetMemory(sessionId, "Tokens");
-            Assert.IsTrue(fetchedLease.Tensor.TryGet<Memory<int>>(out Memory<int> fetched));
+            Memory<int> fetched = memoryManager.GetMemory<int>(sessionId, "Tokens");
 
             Assert.AreEqual(4, fetched.Length);
             Assert.AreEqual(13, fetched.Span[0]);
@@ -28,10 +26,8 @@ namespace BitNetSharp.Tests
             Guid firstSessionId = Guid.NewGuid();
             Guid secondSessionId = Guid.NewGuid();
 
-            RuntimeTensorLease firstLease = memoryManager.RequestMemory<int>(firstSessionId, "LayerKeyCache:0", 4);
-            RuntimeTensorLease secondLease = memoryManager.RequestMemory<int>(secondSessionId, "LayerKeyCache:0", 4);
-            Assert.IsTrue(firstLease.Tensor.TryGet<Memory<int>>(out Memory<int> firstBuffer));
-            Assert.IsTrue(secondLease.Tensor.TryGet<Memory<int>>(out Memory<int> secondBuffer));
+            Memory<int> firstBuffer = memoryManager.RequestMemory<int>(firstSessionId, "LayerKeyCache:0", 4);
+            Memory<int> secondBuffer = memoryManager.RequestMemory<int>(secondSessionId, "LayerKeyCache:0", 4);
 
             firstBuffer.Span[0] = 11;
             secondBuffer.Span[0] = 29;
@@ -46,10 +42,10 @@ namespace BitNetSharp.Tests
             using var memoryManager = new BitNetMemoryManager();
             Guid sessionId = Guid.NewGuid();
 
-            bool found = memoryManager.TryGetMemory(sessionId, "LayerValueCache:2", out RuntimeTensorLease? lease);
+            bool found = memoryManager.TryGetMemory<int>(sessionId, "LayerValueCache:2", out Memory<int> memory);
 
             Assert.IsFalse(found);
-            Assert.IsNull(lease);
+            Assert.AreEqual(0, memory.Length);
         }
 
         [TestMethod]
@@ -62,10 +58,8 @@ namespace BitNetSharp.Tests
 
             memoryManager.Release(sessionId, "LayerKeyCache:0");
 
-            Assert.IsFalse(memoryManager.TryGetMemory(sessionId, "LayerKeyCache:0", out _));
-            Assert.IsTrue(memoryManager.TryGetMemory(sessionId, "LayerKeyCache:1", out RuntimeTensorLease? remainingLease));
-            Assert.IsNotNull(remainingLease);
-            Assert.IsTrue(remainingLease.Tensor.TryGet<Memory<int>>(out Memory<int> remainingBuffer));
+            Assert.IsFalse(memoryManager.TryGetMemory<int>(sessionId, "LayerKeyCache:0", out _));
+            Assert.IsTrue(memoryManager.TryGetMemory<int>(sessionId, "LayerKeyCache:1", out Memory<int> remainingBuffer));
             Assert.AreEqual(4, remainingBuffer.Length);
         }
     }

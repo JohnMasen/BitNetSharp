@@ -7,28 +7,19 @@ namespace BitNetSharp
         private readonly Dictionary<Guid, Dictionary<string, MemoryEntry>> memorySessions = new();
         private bool disposed;
 
-        private sealed record MemoryEntry(IDisposable Owner, RuntimeTensor Tensor, int RequestedLength, Type ElementType, int ElementSizeInBytes);
-
-        private sealed class NoOpLeaseHandle : IDisposable
-        {
-            internal static NoOpLeaseHandle Instance { get; } = new();
-
-            public void Dispose()
-            {
-            }
-        }
+        private sealed record MemoryEntry(IDisposable Owner, int RequestedLength, Type ElementType, int ElementSizeInBytes);
 
         /// <summary>
-        /// Gets a previously requested tensor lease for the specified session and key.
+        /// Gets a previously requested memory block for the specified session and key.
         /// </summary>
-        public RuntimeTensorLease GetMemory(Guid id, string key)
+        public Memory<T> GetMemory<T>(Guid id, string key) where T : unmanaged
         {
             ObjectDisposedException.ThrowIf(disposed, this);
             ArgumentException.ThrowIfNullOrWhiteSpace(key);
 
-            if (TryGetMemory(id, key, out RuntimeTensorLease? lease))
+            if (TryGetMemory<T>(id, key, out Memory<T> memory))
             {
-                return lease;
+                return memory;
             }
 
             if (memorySessions.ContainsKey(id))
@@ -40,9 +31,9 @@ namespace BitNetSharp
         }
 
         /// <summary>
-        /// Allocates a pooled tensor lease for the specified session and key.
+        /// Allocates a pooled memory block for the specified session and key.
         /// </summary>
-        public RuntimeTensorLease RequestMemory<T>(Guid id, string key, int size) where T : unmanaged
+        public Memory<T> RequestMemory<T>(Guid id, string key, int size) where T : unmanaged
         {
             ObjectDisposedException.ThrowIf(disposed, this);
             ArgumentException.ThrowIfNullOrWhiteSpace(key);
@@ -60,44 +51,54 @@ namespace BitNetSharp
 
             if (session.TryGetValue(key, out MemoryEntry? existingMemoryEntry))
             {
-                if (existingMemoryEntry.Owner is IMemoryOwner<T> existingMemoryOwner && existingMemoryOwner.Memory.Length >= size)
+                if (existingMemoryEntry.Owner is IMemoryOwner<T> existingMemoryOwner)
                 {
-                    MemoryEntry updatedEntry = CreateMemoryEntry(existingMemoryOwner, key, size);
-                    session[key] = updatedEntry;
-                    return CreateLease(updatedEntry);
+                    if (existingMemoryOwner.Memory.Length >= size)
+                    {
+                        MemoryEntry updatedEntry = CreateMemoryEntry(existingMemoryOwner, size);
+                        session[key] = updatedEntry;
+                        return GetMemory(existingMemoryOwner, updatedEntry.RequestedLength);
+                    }
+
+                    throw new InvalidOperationException($"Request memory size is larger than existing one,key={key},request size={size},existingSize={existingMemoryOwner.Memory.Length}");
                 }
 
-                existingMemoryEntry.Owner.Dispose();
+                throw new InvalidOperationException("Invalid memory object type,expected IMemoryOwner<T>");
             }
 
             IMemoryOwner<T> memoryOwner = MemoryPool<T>.Shared.Rent(size);
-            MemoryEntry entry = CreateMemoryEntry(memoryOwner, key, size);
+            MemoryEntry entry = CreateMemoryEntry(memoryOwner, size);
             session[key] = entry;
-            return CreateLease(entry);
+            return GetMemory(memoryOwner, entry.RequestedLength);
         }
 
         /// <summary>
-        /// Tries to get a previously requested tensor lease for the specified session and key.
+        /// Tries to get a previously requested memory block for the specified session and key.
         /// </summary>
-        public bool TryGetMemory(Guid id, string key, out RuntimeTensorLease? lease)
+        public bool TryGetMemory<T>(Guid id, string key, out Memory<T> memory) where T : unmanaged
         {
             ObjectDisposedException.ThrowIf(disposed, this);
             ArgumentException.ThrowIfNullOrWhiteSpace(key);
 
             if (!memorySessions.TryGetValue(id, out Dictionary<string, MemoryEntry>? session))
             {
-                lease = null;
+                memory = Memory<T>.Empty;
                 return false;
             }
 
             if (!session.TryGetValue(key, out MemoryEntry? memoryEntry))
             {
-                lease = null;
+                memory = Memory<T>.Empty;
                 return false;
             }
 
-            lease = CreateLease(memoryEntry);
-            return true;
+            if (memoryEntry.Owner is IMemoryOwner<T> memoryOwner)
+            {
+                memory = GetMemory(memoryOwner, memoryEntry.RequestedLength);
+                return true;
+            }
+
+            throw new InvalidOperationException("Invalid memory object type,expected IMemoryOwner<T>");
         }
 
         /// <summary>
@@ -187,17 +188,16 @@ namespace BitNetSharp
             }
         }
 
-        private static RuntimeTensorLease CreateLease(MemoryEntry entry)
-        {
-            return new RuntimeTensorLease(entry.Tensor, NoOpLeaseHandle.Instance);
-        }
-
-        private static MemoryEntry CreateMemoryEntry<T>(IMemoryOwner<T> memoryOwner, string key, int requestedLength)
+        private static Memory<T> GetMemory<T>(IMemoryOwner<T> memoryOwner, int requestedLength)
             where T : unmanaged
         {
-            Memory<T> memory = memoryOwner.Memory.Slice(0, requestedLength);
-            RuntimeTensor tensor = RuntimeTensor.CreateWritable(key, memory, [requestedLength]);
-            return new MemoryEntry(memoryOwner, tensor, requestedLength, typeof(T), GetElementSizeInBytes<T>());
+            return memoryOwner.Memory.Slice(0, requestedLength);
+        }
+
+        private static MemoryEntry CreateMemoryEntry<T>(IMemoryOwner<T> memoryOwner, int requestedLength)
+            where T : unmanaged
+        {
+            return new MemoryEntry(memoryOwner, requestedLength, typeof(T), GetElementSizeInBytes<T>());
         }
 
         private static int GetElementSizeInBytes<T>() where T : unmanaged

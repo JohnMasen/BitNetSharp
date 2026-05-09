@@ -1,9 +1,11 @@
-﻿using BitNetSharp.Models;
+﻿using BitNetSharp.Core;
+using BitNetSharp.Models;
 using BitNetSharp.Nodes;
-using BitNetSharp.Core;
 using GGUFSharp;
 using System.Buffers;
+using System.Collections;
 using System.Diagnostics;
+using System.Numerics.Tensors;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -538,11 +540,10 @@ namespace BitNetSharp
 
         private static void ApplySquaredReluGate(ReadOnlySpan<float> gate, Span<float> up)
         {
-            for (int index = 0; index < up.Length; index++)
-            {
-                float relu = MathF.Max(gate[index], 0f);
-                up[index] *= relu * relu;
-            }
+            Span<float> tmp = stackalloc float[gate.Length];
+            TensorPrimitives.Max(gate, 0f, tmp); //Relu: x=max(x,0)
+            TensorPrimitives.Multiply(tmp,tmp,tmp); // relu ^2
+            TensorPrimitives.Multiply(up, tmp, up);//up * relu
         }
 
         private void BuildCachedAttentionContext(BitNetSession activeSession, int layerIndex, ReadOnlyMemory<float> query, Memory<float> context, int headCount, int keyValueHeadCount, int headDimension, int keyValueLength, CancellationToken cancellationToken)

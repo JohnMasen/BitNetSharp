@@ -109,11 +109,7 @@ namespace BitNetSharp.Models
 
         private RuntimeTensor CreateByteWeightTensor(BitNetTensorInfo tensorInfo, ReadOnlyMemory<byte> tensorData)
         {
-            RuntimeTensorLease bufferLease = weightMemoryManager.RequestMemory<byte>(weightSessionId, tensorInfo.Name, tensorData.Length);
-            if (!bufferLease.Tensor.TryGet<Memory<byte>>(out Memory<byte> buffer))
-            {
-                throw new InvalidOperationException($"Managed tensor '{tensorInfo.Name}' does not expose writable '{typeof(byte)}' memory.");
-            }
+            Memory<byte> buffer = weightMemoryManager.RequestMemory<byte>(weightSessionId, tensorInfo.Name, tensorData.Length);
 
             tensorData.CopyTo(buffer);
             return RuntimeTensor.CreateReadOnly<byte>(
@@ -125,11 +121,7 @@ namespace BitNetSharp.Models
         private RuntimeTensor CreateSingleWeightTensor(BitNetTensorInfo tensorInfo, ReadOnlyMemory<byte> tensorData)
         {
             int elementCount = checked(tensorInfo.Dimensions.Aggregate<ulong, int>(1, static (count, dimension) => checked(count * (int)dimension)));
-            RuntimeTensorLease bufferLease = weightMemoryManager.RequestMemory<float>(weightSessionId, tensorInfo.Name, elementCount);
-            if (!bufferLease.Tensor.TryGet<Memory<float>>(out Memory<float> buffer))
-            {
-                throw new InvalidOperationException($"Managed tensor '{tensorInfo.Name}' does not expose writable '{typeof(float)}' memory.");
-            }
+            Memory<float> buffer = weightMemoryManager.RequestMemory<float>(weightSessionId, tensorInfo.Name, elementCount);
 
             switch (tensorInfo.TensorType)
             {
@@ -195,11 +187,7 @@ namespace BitNetSharp.Models
             ArgumentException.ThrowIfNullOrWhiteSpace(key);
 
             using IMemoryOwner<byte> tensorData = ReadTensorData(tensorName);
-            RuntimeTensorLease bufferLease = memoryManager.RequestMemory<byte>(sessionId, key, tensorData.Memory.Length);
-            if (!bufferLease.Tensor.TryGet<Memory<byte>>(out Memory<byte> buffer))
-            {
-                throw new InvalidOperationException($"Managed tensor '{key}' does not expose writable '{typeof(byte)}' memory.");
-            }
+            Memory<byte> buffer = memoryManager.RequestMemory<byte>(sessionId, key, tensorData.Memory.Length);
 
             tensorData.Memory.CopyTo(buffer);
             return buffer;
