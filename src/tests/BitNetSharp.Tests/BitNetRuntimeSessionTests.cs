@@ -198,7 +198,7 @@ namespace BitNetSharp.Tests
 
             runtime.StartConversation("hello");
 
-            Assert.IsFalse(runtime.Session.Tokens.IsEmpty);
+            Assert.IsTrue(runtime.Session.Tokens.Count > 0);
         }
 
         [TestMethod]

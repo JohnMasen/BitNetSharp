@@ -4,7 +4,6 @@ namespace BitNetSharp
 {
     public class BitNetSession : IDisposable
     {
-        private const string TokensKey = nameof(Tokens);
         private const string LayerKeyCachePrefix = "LayerKeyCache:";
         private const string LayerValueCachePrefix = "LayerValueCache:";
         internal const string EmbeddingKey = nameof(Embedding);
@@ -24,6 +23,7 @@ namespace BitNetSharp
         private readonly BitNetModel model;
         private readonly BitNetMemoryManager memoryManager;
         private readonly Dictionary<string, RuntimeTensor> runtimeTensors = new(StringComparer.Ordinal);
+        private readonly List<int> tokens = [];
         private int currentToken;
         private int currentOutputStartIndex;
         private bool disposed;
@@ -77,7 +77,7 @@ namespace BitNetSharp
             GC.SuppressFinalize(this);
         }
 
-        public Memory<int> Tokens => GetMemory<int>(TokensKey);
+        public IReadOnlyList<int> Tokens => tokens;
 
         public int CurrentToken
         {
@@ -135,7 +135,7 @@ namespace BitNetSharp
                     return ReadOnlyMemory<int>.Empty;
                 }
 
-                return Tokens.Slice(currentOutputStartIndex, CurrentOutputTokenCount);
+                return tokens.GetRange(currentOutputStartIndex, CurrentOutputTokenCount).ToArray();
             }
         }
 
@@ -226,7 +226,7 @@ namespace BitNetSharp
             ObjectDisposedException.ThrowIf(disposed, this);
 
             OutputRound++;
-            currentOutputStartIndex = Tokens.Length;
+            currentOutputStartIndex = tokens.Count;
             CurrentOutputTokenCount = 0;
             HasActiveOutputRound = true;
         }
@@ -288,15 +288,6 @@ namespace BitNetSharp
             ObjectDisposedException.ThrowIf(disposed, this);
 
             return runtimeTensors.TryGetValue(key, out RuntimeTensor? tensor) && tensor.TryGet<Memory<T>>(out _);
-        }
-
-        private Memory<T> GetMemory<T>(string key) where T : unmanaged
-        {
-            ObjectDisposedException.ThrowIf(disposed, this);
-
-            return memoryManager.TryGetMemory<T>(Id, key, out Memory<T> memory)
-                ? memory
-                : Memory<T>.Empty;
         }
 
         private RuntimeTensor CreateRuntimeTensor(string name)
@@ -390,11 +381,7 @@ namespace BitNetSharp
 
         private void AppendTokenCore(int tokenId)
         {
-            Memory<int> existingTokens = Tokens;
-            RuntimeTensor tokensTensor = CreateRuntimeTensor<int>(TokensKey, existingTokens.Length + 1);
-            Memory<int> tokens = GetTensorMemory<int>(tokensTensor, TokensKey);
-            existingTokens.Span.CopyTo(tokens.Span);
-            tokens.Span[existingTokens.Length] = tokenId;
+            tokens.Add(tokenId);
             currentToken = tokenId;
         }
 
@@ -405,9 +392,7 @@ namespace BitNetSharp
                 return;
             }
 
-            RuntimeTensor tokensTensor = CreateRuntimeTensor<int>(TokensKey, tokens.Length);
-            Memory<int> targetTokens = GetTensorMemory<int>(tokensTensor, TokensKey);
-            tokens.Span.CopyTo(targetTokens.Span);
+            this.tokens.AddRange(tokens.ToArray());
             currentToken = tokens.Span[^1];
             currentOutputStartIndex = tokens.Length;
         }

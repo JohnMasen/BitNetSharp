@@ -383,7 +383,7 @@ namespace BitNetSharp.Console
                 return;
             }
 
-            System.Console.WriteLine($"[Session Tokens={runtime.Session.Tokens.Length}, Cache Length={runtime.Session.CacheLength}]");
+            System.Console.WriteLine($"[Session Tokens={runtime.Session.Tokens.Count}, Cache Length={runtime.Session.CacheLength}]");
         }
 
         private static void PrintTiming(BitNetRuntime runtime, long firstTokenElapsedMilliseconds, long totalElapsedMilliseconds)
@@ -438,7 +438,7 @@ namespace BitNetSharp.Console
         {
             try
             {
-                return !runtime.Session.Tokens.IsEmpty;
+                return runtime.Session.Tokens.Count > 0;
             }
             catch (InvalidOperationException)
             {

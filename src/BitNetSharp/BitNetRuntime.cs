@@ -213,12 +213,12 @@ namespace BitNetSharp
             ValidateOutputTokenCount(outputTokenCount);
 
             BitNetSession activeSession = Session;
-            if (activeSession.Tokens.IsEmpty)
+            if (activeSession.Tokens.Count == 0)
             {
                 throw new InvalidOperationException("The session does not contain any prompt tokens. Initialize the session before continuing generation.");
             }
 
-            if (activeSession.CacheLength != activeSession.Tokens.Length)
+            if (activeSession.CacheLength != activeSession.Tokens.Count)
             {
                 throw new InvalidOperationException("The session state is not ready for generation. Prefill the current token before continuing generation.");
             }
@@ -271,7 +271,7 @@ namespace BitNetSharp
         {
             ObjectDisposedException.ThrowIf(disposed, this);
 
-            bool isFirstMessage = session is null || Session.Tokens.IsEmpty;
+            bool isFirstMessage = session is null || Session.Tokens.Count == 0;
             IReadOnlyList<int> promptTokenIds = tokenizer.EncodeChatMessageToIds(BitNetChatRole.User, userMessage, isFirstMessage: isFirstMessage);
             if (isFirstMessage)
             {

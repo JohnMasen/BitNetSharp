@@ -98,7 +98,7 @@ namespace BitNetSharp.Tests
             using var memoryManager = new BitNetMemoryManager();
             using var session = new BitNetSession(model, memoryManager);
 
-            Assert.IsTrue(session.Tokens.IsEmpty);
+            Assert.AreEqual(0, session.Tokens.Count);
         }
     }
 }
