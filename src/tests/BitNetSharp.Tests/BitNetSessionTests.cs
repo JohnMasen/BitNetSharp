@@ -64,6 +64,35 @@ namespace BitNetSharp.Tests
         }
 
         [TestMethod]
+        public void Tokens_EnumeratesInputAndCurrentOutput()
+        {
+            using var model = TestModelFactory.LoadModel();
+            using var memoryManager = new BitNetMemoryManager();
+            using var session = new BitNetSession(model, memoryManager, new[] { 10, 11 });
+            session.BeginOutputRound();
+
+            session.AppendOutputToken(12);
+            session.AppendOutputToken(13);
+
+            CollectionAssert.AreEqual(new[] { 10, 11, 12, 13 }, session.Tokens.ToArray());
+        }
+
+        [TestMethod]
+        public void AppendToken_CommitsPendingOutputBeforeAddingInput()
+        {
+            using var model = TestModelFactory.LoadModel();
+            using var memoryManager = new BitNetMemoryManager();
+            using var session = new BitNetSession(model, memoryManager, new[] { 10, 11 });
+            session.BeginOutputRound();
+            session.AppendOutputToken(12);
+
+            session.AppendToken(13);
+
+            CollectionAssert.AreEqual(new[] { 10, 11, 12, 13 }, session.Tokens.ToArray());
+            CollectionAssert.AreEqual(Array.Empty<int>(), session.CurrentOutputTokens.ToArray());
+        }
+
+        [TestMethod]
         public void GetOrCreateLayerKeyCacheTensor_AllocatesContextSizedBuffer()
         {
             using var model = TestModelFactory.LoadModel();
@@ -98,7 +127,8 @@ namespace BitNetSharp.Tests
             using var memoryManager = new BitNetMemoryManager();
             using var session = new BitNetSession(model, memoryManager);
 
-            Assert.AreEqual(0, session.Tokens.Count);
+            Assert.AreEqual(0, session.TokenCount);
+            CollectionAssert.AreEqual(Array.Empty<int>(), session.Tokens.ToArray());
         }
     }
 }

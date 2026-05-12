@@ -23,9 +23,9 @@ namespace BitNetSharp
         private readonly BitNetModel model;
         private readonly BitNetMemoryManager memoryManager;
         private readonly Dictionary<string, RuntimeTensor> runtimeTensors = new(StringComparer.Ordinal);
-        private readonly List<int> tokens = [];
+        private readonly List<int> inputTokens = [];
+        private readonly List<int> outputTokens = [];
         private int currentToken;
-        private int currentOutputStartIndex;
         private bool disposed;
 
         public BitNetSession(BitNetModel model, BitNetMemoryManager memoryManager)
@@ -46,7 +46,6 @@ namespace BitNetSharp
             this.model = model;
             this.memoryManager = memoryManager;
             Id = id;
-            currentOutputStartIndex = 0;
             TopKTokenIds = [];
             TopKLogits = [];
         }
@@ -72,12 +71,23 @@ namespace BitNetSharp
             }
 
             runtimeTensors.Clear();
+            inputTokens.Clear();
+            outputTokens.Clear();
             memoryManager.Release(Id);
             disposed = true;
             GC.SuppressFinalize(this);
         }
 
-        public IReadOnlyList<int> Tokens => tokens;
+        public IEnumerable<int> Tokens => EnumerateTokens();
+
+        public int TokenCount
+        {
+            get
+            {
+                ObjectDisposedException.ThrowIf(disposed, this);
+                return inputTokens.Count + outputTokens.Count;
+            }
+        }
 
         public int CurrentToken
         {
@@ -97,7 +107,7 @@ namespace BitNetSharp
 
         public bool HasActiveOutputRound { get; private set; }
 
-        public int CurrentOutputTokenCount { get; private set; }
+        public int CurrentOutputTokenCount => outputTokens.Count;
 
         public int CacheLength { get; set; }
 
@@ -135,7 +145,7 @@ namespace BitNetSharp
                     return ReadOnlyMemory<int>.Empty;
                 }
 
-                return tokens.GetRange(currentOutputStartIndex, CurrentOutputTokenCount).ToArray();
+                return outputTokens.ToArray();
             }
         }
 
@@ -215,7 +225,8 @@ namespace BitNetSharp
         public void AppendToken(int tokenId)
         {
             ObjectDisposedException.ThrowIf(disposed, this);
-            AppendTokenCore(tokenId);
+            CommitOutputTokens();
+            AppendTokenCore(inputTokens, tokenId);
         }
 
         /// <summary>
@@ -225,9 +236,8 @@ namespace BitNetSharp
         {
             ObjectDisposedException.ThrowIf(disposed, this);
 
+            CommitOutputTokens();
             OutputRound++;
-            currentOutputStartIndex = tokens.Count;
-            CurrentOutputTokenCount = 0;
             HasActiveOutputRound = true;
         }
 
@@ -243,8 +253,7 @@ namespace BitNetSharp
                 throw new InvalidOperationException("Call BeginOutputRound before appending output tokens.");
             }
 
-            AppendTokenCore(tokenId);
-            CurrentOutputTokenCount++;
+            AppendTokenCore(outputTokens, tokenId);
         }
 
         /// <summary>
@@ -290,6 +299,23 @@ namespace BitNetSharp
             return runtimeTensors.TryGetValue(key, out RuntimeTensor? tensor) && tensor.TryGet<Memory<T>>(out _);
         }
 
+        internal int GetTokenAt(int index)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+
+            if ((uint)index >= (uint)TokenCount)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index));
+            }
+
+            if (index < inputTokens.Count)
+            {
+                return inputTokens[index];
+            }
+
+            return outputTokens[index - inputTokens.Count];
+        }
+
         private RuntimeTensor CreateRuntimeTensor(string name)
         {
             if (TryCreateLayerCacheTensor(name, out RuntimeTensor? layerCacheTensor))
@@ -322,7 +348,7 @@ namespace BitNetSharp
                 || TryParseLayerCacheTensorName(name, LayerValueCachePrefix, out keyLayerIndex))
             {
                 ValidateLayerIndex(keyLayerIndex);
-                int cacheElementCount = GetConfig(()=>model.Config.FeedForwardLength) * GetConfig(() => model.Config.KeyValueProjectionSize);
+                int cacheElementCount = GetConfig(()=>model.Config.ContextLength) * GetConfig(() => model.Config.KeyValueProjectionSize);
                 tensor = CreateRuntimeTensor<float>(name, cacheElementCount);
                 return true;
             }
@@ -379,10 +405,36 @@ namespace BitNetSharp
             }
         }
 
-        private void AppendTokenCore(int tokenId)
+        private IEnumerable<int> EnumerateTokens()
         {
-            tokens.Add(tokenId);
+            ObjectDisposedException.ThrowIf(disposed, this);
+
+            foreach (int token in inputTokens)
+            {
+                yield return token;
+            }
+
+            foreach (int token in outputTokens)
+            {
+                yield return token;
+            }
+        }
+
+        private void AppendTokenCore(List<int> targetTokens, int tokenId)
+        {
+            targetTokens.Add(tokenId);
             currentToken = tokenId;
+        }
+
+        private void CommitOutputTokens()
+        {
+            if (outputTokens.Count == 0)
+            {
+                return;
+            }
+
+            inputTokens.AddRange(outputTokens);
+            outputTokens.Clear();
         }
 
         private void InitializeTokens(ReadOnlyMemory<int> tokens)
@@ -391,10 +443,8 @@ namespace BitNetSharp
             {
                 return;
             }
-
-            this.tokens.AddRange(tokens.ToArray());
+            inputTokens.AddRange(tokens.ToArray());
             currentToken = tokens.Span[^1];
-            currentOutputStartIndex = tokens.Length;
         }
 
         

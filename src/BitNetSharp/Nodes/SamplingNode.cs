@@ -258,12 +258,12 @@ namespace BitNetSharp.Nodes
                 return;
             }
 
-            IReadOnlyList<int> tokenHistory = session.Tokens;
-            int startIndex = Math.Max(0, tokenHistory.Count - repeatLastN);
+            int tokenCount = session.TokenCount;
+            int startIndex = Math.Max(0, tokenCount - repeatLastN);
             HashSet<int> penalizedTokenIds = new();
-            for (int index = startIndex; index < tokenHistory.Count; index++)
+            for (int index = startIndex; index < tokenCount; index++)
             {
-                int tokenId = tokenHistory[index];
+                int tokenId = session.GetTokenAt(index);
                 if ((uint)tokenId >= (uint)adjustedLogits.Length || !penalizedTokenIds.Add(tokenId))
                 {
                     continue;

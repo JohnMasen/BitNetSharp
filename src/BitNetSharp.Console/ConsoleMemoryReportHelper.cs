@@ -93,7 +93,7 @@ namespace BitNetSharp.Console
         {
             try
             {
-                return runtime.Session.Tokens.Count > 0;
+                return runtime.Session.TokenCount > 0;
             }
             catch (InvalidOperationException)
             {
