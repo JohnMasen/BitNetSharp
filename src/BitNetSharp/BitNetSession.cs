@@ -299,19 +299,19 @@ namespace BitNetSharp
 
             return name switch
             {
-                EmbeddingKey => CreateRuntimeTensor<float>(name, GetEmbeddingLength()),
-                RmsNormKey => CreateRuntimeTensor<float>(name, GetEmbeddingLength()),
-                QKVQueryKey => CreateRuntimeTensor<float>(name, GetEmbeddingLength()),
-                QKVKeyKey => CreateRuntimeTensor<float>(name, GetKeyValueProjectionLength()),
-                QKVValueKey => CreateRuntimeTensor<float>(name, GetKeyValueProjectionLength()),
-                AttentionSubNormKey => CreateRuntimeTensor<float>(name, GetEmbeddingLength()),
-                AttentionOutputKey => CreateRuntimeTensor<float>(name, GetEmbeddingLength()),
-                FeedForwardInputKey => CreateRuntimeTensor<float>(name, GetEmbeddingLength()),
-                FeedForwardNormKey => CreateRuntimeTensor<float>(name, GetEmbeddingLength()),
-                FeedForwardSubNormKey => CreateRuntimeTensor<float>(name, GetFeedForwardLength()),
-                FeedForwardOutputKey => CreateRuntimeTensor<float>(name, GetEmbeddingLength()),
-                FinalNormOutputKey => CreateRuntimeTensor<float>(name, GetEmbeddingLength()),
-                LogitsKey => CreateRuntimeTensor<float>(name, GetVocabularySize()),
+                EmbeddingKey => CreateRuntimeTensor<float>(name, GetConfig(()=>model.Config.EmbeddingLength)),
+                RmsNormKey => CreateRuntimeTensor<float>(name, GetConfig(()=>model.Config.EmbeddingLength)),
+                QKVQueryKey => CreateRuntimeTensor<float>(name, GetConfig(()=>model.Config.EmbeddingLength)),
+                QKVKeyKey => CreateRuntimeTensor<float>(name, GetConfig(()=>model.Config.KeyValueProjectionSize)),
+                QKVValueKey => CreateRuntimeTensor<float>(name, GetConfig(() => model.Config.KeyValueProjectionSize)),
+                AttentionSubNormKey => CreateRuntimeTensor<float>(name, GetConfig(()=>model.Config.EmbeddingLength)),
+                AttentionOutputKey => CreateRuntimeTensor<float>(name, GetConfig(()=>model.Config.EmbeddingLength)),
+                FeedForwardInputKey => CreateRuntimeTensor<float>(name, GetConfig(()=>model.Config.EmbeddingLength)),
+                FeedForwardNormKey => CreateRuntimeTensor<float>(name, GetConfig(()=>model.Config.EmbeddingLength)),
+                FeedForwardSubNormKey => CreateRuntimeTensor<float>(name, GetConfig(()=>model.Config.FeedForwardLength)),
+                FeedForwardOutputKey => CreateRuntimeTensor<float>(name, GetConfig(()=>model.Config.EmbeddingLength)),
+                FinalNormOutputKey => CreateRuntimeTensor<float>(name, GetConfig(()=>model.Config.EmbeddingLength)),
+                LogitsKey => CreateRuntimeTensor<float>(name, GetConfig(()=>model.Config.VocabularySize)),
                 _ => throw new InvalidOperationException($"Unknown runtime tensor '{name}'."),
             };
         }
@@ -322,7 +322,7 @@ namespace BitNetSharp
                 || TryParseLayerCacheTensorName(name, LayerValueCachePrefix, out keyLayerIndex))
             {
                 ValidateLayerIndex(keyLayerIndex);
-                int cacheElementCount = checked(GetContextLength() * GetKeyValueProjectionLength());
+                int cacheElementCount = GetConfig(()=>model.Config.FeedForwardLength) * GetConfig(() => model.Config.KeyValueProjectionSize);
                 tensor = CreateRuntimeTensor<float>(name, cacheElementCount);
                 return true;
             }
@@ -397,65 +397,15 @@ namespace BitNetSharp
             currentOutputStartIndex = tokens.Length;
         }
 
-        private static Memory<T> GetTensorMemory<T>(RuntimeTensor tensor, string key)
-            where T : unmanaged
-        {
-            if (tensor.TryGet<Memory<T>>(out Memory<T> memory))
-            {
-                return memory;
-            }
-
-            throw new InvalidOperationException($"Runtime tensor '{key}' does not expose writable '{typeof(T)}' memory.");
-        }
-
-        private int GetEmbeddingLength()
+        
+        private int GetConfig(Func<uint> getConfigFunc)
         {
             if (model.Config is null)
             {
                 throw new InvalidOperationException("The model must be loaded before session memory can be initialized.");
             }
 
-            return checked((int)model.Config.EmbeddingLength);
-        }
-
-        private int GetContextLength()
-        {
-            if (model.Config is null)
-            {
-                throw new InvalidOperationException("The model must be loaded before session memory can be initialized.");
-            }
-
-            return checked((int)model.Config.ContextLength);
-        }
-
-        private int GetKeyValueProjectionLength()
-        {
-            if (model.Config is null)
-            {
-                throw new InvalidOperationException("The model must be loaded before session memory can be initialized.");
-            }
-
-            return checked((int)model.Config.KeyValueProjectionSize);
-        }
-
-        private int GetFeedForwardLength()
-        {
-            if (model.Config is null)
-            {
-                throw new InvalidOperationException("The model must be loaded before session memory can be initialized.");
-            }
-
-            return checked((int)model.Config.FeedForwardLength);
-        }
-
-        private int GetVocabularySize()
-        {
-            if (model.Config is null)
-            {
-                throw new InvalidOperationException("The model must be loaded before session memory can be initialized.");
-            }
-
-            return checked((int)model.Config.VocabularySize);
+            return checked((int)getConfigFunc());
         }
     }
 }
