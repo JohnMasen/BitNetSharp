@@ -73,6 +73,21 @@ namespace BitNetSharp
         }
 
         /// <summary>
+        /// Rents a one-shot, disposable memory lease of the specified element count.
+        /// The lease is not tracked by this manager and must be disposed by the caller
+        /// (typically with a <c>using</c> statement) to return the underlying buffer
+        /// to <see cref="MemoryPool{T}.Shared"/>.
+        /// </summary>
+        public IMemoryLease GetMemoryLease<T>(int size) where T : unmanaged
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(size);
+
+            IMemoryOwner<T> memoryOwner = MemoryPool<T>.Shared.Rent(size);
+            return new BitNetHostMemoryLease<T>(memoryOwner, size);
+        }
+
+        /// <summary>
         /// Tries to get a previously requested memory block for the specified session and key.
         /// </summary>
         public bool TryGetMemory<T>(Guid id, string key, out Memory<T> memory) where T : unmanaged
