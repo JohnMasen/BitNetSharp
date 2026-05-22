@@ -292,6 +292,13 @@ namespace BitNetSharp
             return tensor;
         }
 
+        public IMemoryLease LeaseMemory<T>(int size, string? tag = null)
+            where T : unmanaged
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            return memoryManager.GetMemoryLease<T>(size, tag);
+        }
+
         internal bool HasMemory<T>(string key) where T : unmanaged
         {
             ObjectDisposedException.ThrowIf(disposed, this);

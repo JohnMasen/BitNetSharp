@@ -78,13 +78,13 @@ namespace BitNetSharp
         /// (typically with a <c>using</c> statement) to return the underlying buffer
         /// to <see cref="MemoryPool{T}.Shared"/>.
         /// </summary>
-        public IMemoryLease GetMemoryLease<T>(int size) where T : unmanaged
+        public IMemoryLease GetMemoryLease<T>(int size, string? tag = null) where T : unmanaged
         {
             ObjectDisposedException.ThrowIf(disposed, this);
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(size);
 
             IMemoryOwner<T> memoryOwner = MemoryPool<T>.Shared.Rent(size);
-            return new BitNetHostMemoryLease<T>(memoryOwner, size);
+            return new BitNetHostMemoryLease<T>(memoryOwner, size, tag);
         }
 
         /// <summary>

@@ -123,7 +123,7 @@ namespace BitNetSharp.Nodes
                 PackedProjectionWeights cachedGateWeights = EnsureCachedGateWeights();
                 PackedProjectionWeights cachedUpWeights = EnsureCachedUpWeights();
                 PackedProjectionWeights cachedDownWeights = EnsureCachedDownWeights();
-                ExecuteFeedForward(input, EnsureCachedSubNormWeights(), cachedGateWeights, cachedUpWeights, cachedDownWeights, embeddingLength, feedForwardLength, subNorm, output);
+                ExecuteFeedForward(session, input, EnsureCachedSubNormWeights(), cachedGateWeights, cachedUpWeights, cachedDownWeights, embeddingLength, feedForwardLength, subNorm, output);
                 return;
             }
 
@@ -135,18 +135,18 @@ namespace BitNetSharp.Nodes
             using IMemoryOwner<byte> downTensorData = model.ReadTensorData(downTensor);
             PackedProjectionWeights downWeights = ParsePackedWeights(downTensorData.Memory, downTensor, "Feed-forward down");
 
-            ExecuteFeedForward(input, session.GetWeightTensor(subNormTensor.Name), gateWeights, upWeights, downWeights, embeddingLength, feedForwardLength, subNorm, output);
+            ExecuteFeedForward(session, input, session.GetWeightTensor(subNormTensor.Name), gateWeights, upWeights, downWeights, embeddingLength, feedForwardLength, subNorm, output);
         }
 
-        private void ExecuteFeedForward(RuntimeTensor input, RuntimeTensor subNormWeights, PackedProjectionWeights gateWeights, PackedProjectionWeights upWeights, PackedProjectionWeights downWeights, int embeddingLength, int feedForwardLength, RuntimeTensor subNormOutput, RuntimeTensor output)
+        private void ExecuteFeedForward(BitNetSession session, RuntimeTensor input, RuntimeTensor subNormWeights, PackedProjectionWeights gateWeights, PackedProjectionWeights upWeights, PackedProjectionWeights downWeights, int embeddingLength, int feedForwardLength, RuntimeTensor subNormOutput, RuntimeTensor output)
         {
-            using IMemoryOwner<float> upOwner = MemoryPool<float>.Shared.Rent(feedForwardLength);
-            using IMemoryOwner<float> gateOwner = MemoryPool<float>.Shared.Rent(feedForwardLength);
             ReadOnlyMemory<float> inputMemory = input.GetReadOnlyMemory<float>();
-            using IMemoryOwner<sbyte> quantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(inputMemory.Length);
-            Memory<float> up = upOwner.Memory[..feedForwardLength];
-            Memory<float> gate = gateOwner.Memory[..feedForwardLength];
-            Memory<sbyte> quantizedValues = quantizedValuesOwner.Memory[..inputMemory.Length];
+            using IMemoryLease upLease = session.LeaseMemory<float>(feedForwardLength, "FeedForwardUp");
+            using IMemoryLease gateLease = session.LeaseMemory<float>(feedForwardLength, "FeedForwardGate");
+            using IMemoryLease quantizedValuesLease = session.LeaseMemory<sbyte>(inputMemory.Length, "FeedForwardQuantized");
+            Memory<float> up = upLease.GetMemory<float>();
+            Memory<float> gate = gateLease.GetMemory<float>();
+            Memory<sbyte> quantizedValues = quantizedValuesLease.GetMemory<sbyte>();
             RuntimeTensor upTensor = RuntimeTensor.CreateWritable("FeedForwardUp", up, [feedForwardLength]);
             RuntimeTensor gateTensor = RuntimeTensor.CreateWritable("FeedForwardGate", gate, [feedForwardLength]);
             RuntimeTensor quantizedTensor = RuntimeTensor.CreateWritable("FeedForwardQuantized", quantizedValues, [inputMemory.Length]);

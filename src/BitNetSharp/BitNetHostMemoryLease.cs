@@ -12,14 +12,18 @@ namespace BitNetSharp
     {
         private readonly IMemoryOwner<T> memoryOwner;
         private readonly int length;
+        private readonly string? tag;
         private bool disposed;
 
-        public BitNetHostMemoryLease(IMemoryOwner<T> memoryOwner, int length)
+        public BitNetHostMemoryLease(IMemoryOwner<T> memoryOwner, int length, string? tag = null)
         {
             ArgumentNullException.ThrowIfNull(memoryOwner);
             this.memoryOwner = memoryOwner;
             this.length = length;
+            this.tag = tag;
         }
+
+        public string? Tag => tag;
 
         public Type ElementType => typeof(T);
 

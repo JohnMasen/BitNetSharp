@@ -135,7 +135,7 @@ namespace BitNetSharp.Nodes
                 PackedProjectionWeights cachedOutputWeights = EnsureCachedOutputWeights();
                 ReadOnlyMemory<float> cachedOutputScaleValues = TryEnsureCachedOutputScaleValues();
                 ReadOnlyMemory<float> cachedOutputBiasValues = TryEnsureCachedOutputBiasValues();
-                ExecuteAttention(query, key, value, EnsureCachedSubNormWeights(), cachedOutputWeights, cachedOutputScaleValues.Span, cachedOutputBiasValues.Span, subNorm, output);
+                ExecuteAttention(session, query, key, value, EnsureCachedSubNormWeights(), cachedOutputWeights, cachedOutputScaleValues.Span, cachedOutputBiasValues.Span, subNorm, output);
                 return;
             }
 
@@ -161,21 +161,20 @@ namespace BitNetSharp.Nodes
                 FillFloatValues(outputBiasTensorData.Memory.Span, outputBiasTensor.TensorType, outputBiasValues, "Attention output bias");
             }
 
-            ExecuteAttention(query, key, value, session.GetWeightTensor(subNormTensor.Name), outputWeights, outputScaleValues, outputBiasValues, subNorm, output);
+            ExecuteAttention(session, query, key, value, session.GetWeightTensor(subNormTensor.Name), outputWeights, outputScaleValues, outputBiasValues, subNorm, output);
         }
 
-        private void ExecuteAttention(ReadOnlyMemory<float> query, ReadOnlyMemory<float> key, ReadOnlyMemory<float> value, RuntimeTensor subNormWeights, PackedProjectionWeights outputWeights, ReadOnlySpan<float> outputScaleValues, ReadOnlySpan<float> outputBiasValues, RuntimeTensor subNorm, RuntimeTensor output)
+        private void ExecuteAttention(BitNetSession session, ReadOnlyMemory<float> query, ReadOnlyMemory<float> key, ReadOnlyMemory<float> value, RuntimeTensor subNormWeights, PackedProjectionWeights outputWeights, ReadOnlySpan<float> outputScaleValues, ReadOnlySpan<float> outputBiasValues, RuntimeTensor subNorm, RuntimeTensor output)
         {
             int embeddingLength = checked((int)model.Config!.EmbeddingLength);
-            int keyValueLength = checked((int)model.Config.KeyValueProjectionSize);
             int headCount = checked((int)model.Config.AttentionHeadCount);
             int keyValueHeadCount = checked((int)model.Config.AttentionKeyValueHeadCount);
             int headDimension = checked((int)model.Config.AttentionHeadDimension);
 
             ValidateProjectionShape(query.Span, key.Span, value.Span);
 
-            using IMemoryOwner<float> attentionContextOwner = MemoryPool<float>.Shared.Rent(embeddingLength);
-            Memory<float> attentionContext = attentionContextOwner.Memory[..embeddingLength];
+            using IMemoryLease attentionContextLease = session.LeaseMemory<float>(embeddingLength, "AttentionContext");
+            Memory<float> attentionContext = attentionContextLease.GetMemory<float>();
             BuildSingleTokenAttentionContext(query, key, value, attentionContext, headCount, keyValueHeadCount, headDimension);
             RuntimeTensor attentionContextTensor = RuntimeTensor.CreateWritable("AttentionContext", attentionContext, [embeddingLength]);
             opProvider.ForwardRmsNorm(attentionContextTensor, subNormWeights, model.Config.AttentionLayerNormRmsEpsilon, subNorm);

@@ -112,8 +112,8 @@ namespace BitNetSharp.Nodes
                 PackedProjectionWeights cachedQueryWeights = EnsureCachedQueryWeights();
                 PackedProjectionWeights cachedKeyWeights = EnsureCachedKeyWeights();
                 PackedProjectionWeights cachedValueWeights = EnsureCachedValueWeights();
-                using IMemoryOwner<sbyte> quantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(inputMemory.Length);
-                Memory<sbyte> quantizedValues = quantizedValuesOwner.Memory[..inputMemory.Length];
+                using IMemoryLease quantizedValuesLease = session.LeaseMemory<sbyte>(inputMemory.Length, "QKVQuantizedValues");
+                Memory<sbyte> quantizedValues = quantizedValuesLease.GetMemory<sbyte>();
                 RuntimeTensor quantizedTensor = RuntimeTensor.CreateWritable("QKVQuantizedValues", quantizedValues, [inputMemory.Length]);
                 (float activationScale, _) = opProvider.QuantizeBitNetActivations(input, quantizedTensor);
                 opProvider.ProjectBitNetI2(quantizedTensor, activationScale, CreatePackedWeightTensor(cachedQueryWeights.PackedWeights, "CachedQKVQueryWeights"), queryOutputLength, cachedQueryWeights.Scale, query);
@@ -129,8 +129,8 @@ namespace BitNetSharp.Nodes
             PackedProjectionWeights keyWeights = ParsePackedWeights(keyTensorData.Memory, keyTensor, "QKV key");
             PackedProjectionWeights valueWeights = ParsePackedWeights(valueTensorData.Memory, valueTensor, "QKV value");
 
-            using IMemoryOwner<sbyte> uncachedQuantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(inputMemory.Length);
-            Memory<sbyte> uncachedQuantizedValues = uncachedQuantizedValuesOwner.Memory[..inputMemory.Length];
+            using IMemoryLease uncachedQuantizedValuesLease = session.LeaseMemory<sbyte>(inputMemory.Length, "QKVQuantizedValues");
+            Memory<sbyte> uncachedQuantizedValues = uncachedQuantizedValuesLease.GetMemory<sbyte>();
             RuntimeTensor uncachedQuantizedTensor = RuntimeTensor.CreateWritable("QKVQuantizedValues", uncachedQuantizedValues, [inputMemory.Length]);
             (float uncachedActivationScale, _) = opProvider.QuantizeBitNetActivations(input, uncachedQuantizedTensor);
             opProvider.ProjectBitNetI2(uncachedQuantizedTensor, uncachedActivationScale, CreatePackedWeightTensor(queryWeights.PackedWeights, "QKVQueryWeights"), queryOutputLength, queryWeights.Scale, query);

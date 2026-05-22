@@ -130,5 +130,22 @@ namespace BitNetSharp.Tests
             Assert.AreEqual(0, session.TokenCount);
             CollectionAssert.AreEqual(Array.Empty<int>(), session.Tokens.ToArray());
         }
+
+        [TestMethod]
+        public void LeaseMemory_ReturnsTaggedTypedLease()
+        {
+            using var model = TestModelFactory.LoadModel();
+            using var memoryManager = new BitNetMemoryManager();
+            using var session = new BitNetSession(model, memoryManager);
+
+            using IMemoryLease lease = session.LeaseMemory<float>(6, "FeedForwardUp");
+            Memory<float> memory = lease.GetMemoryObject<Memory<float>>();
+            memory.Span[0] = 1.25f;
+
+            Assert.AreEqual("FeedForwardUp", lease.Tag);
+            Assert.AreEqual(typeof(float), lease.ElementType);
+            Assert.AreEqual(6, memory.Length);
+            Assert.AreEqual(1.25f, memory.Span[0]);
+        }
     }
 }

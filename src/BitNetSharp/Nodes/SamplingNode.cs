@@ -105,7 +105,10 @@ namespace BitNetSharp.Nodes
                 throw new InvalidOperationException("Session logits must not be empty.");
             }
 
-            float[] adjustedLogits = logits.ToArray();
+            using IMemoryLease adjustedLogitsLease = session.LeaseMemory<float>(logits.Length, "SamplingAdjustedLogits");
+            Memory<float> adjustedLogitsMemory = adjustedLogitsLease.GetMemory<float>();
+            logits.CopyTo(adjustedLogitsMemory.Span);
+            Span<float> adjustedLogits = adjustedLogitsMemory.Span;
             ApplyRepeatPenalty(session, adjustedLogits);
 
             int topKCount = Math.Min(TopK, adjustedLogits.Length);
@@ -251,7 +254,7 @@ namespace BitNetSharp.Nodes
             }
         }
 
-        private void ApplyRepeatPenalty(BitNetSession session, float[] adjustedLogits)
+        private void ApplyRepeatPenalty(BitNetSession session, Span<float> adjustedLogits)
         {
             if (repeatLastN == 0 || Math.Abs(repeatPenalty - 1f) < 1e-6f)
             {

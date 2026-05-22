@@ -10,6 +10,11 @@ namespace BitNetSharp
     public interface IMemoryLease : IDisposable
     {
         /// <summary>
+        /// Gets the optional diagnostic tag associated with this temporary lease.
+        /// </summary>
+        string? Tag { get; }
+
+        /// <summary>
         /// Gets the element type of the leased memory (e.g. <c>typeof(float)</c>).
         /// </summary>
         Type ElementType { get; }

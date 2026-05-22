@@ -62,5 +62,17 @@ namespace BitNetSharp.Tests
             Assert.IsTrue(memoryManager.TryGetMemory<int>(sessionId, "LayerKeyCache:1", out Memory<int> remainingBuffer));
             Assert.AreEqual(4, remainingBuffer.Length);
         }
+
+        [TestMethod]
+        public void GetMemoryLease_PreservesDiagnosticTag()
+        {
+            using var memoryManager = new BitNetMemoryManager();
+
+            using IMemoryLease lease = memoryManager.GetMemoryLease<float>(8, "SamplingAdjustedLogits");
+
+            Assert.AreEqual("SamplingAdjustedLogits", lease.Tag);
+            Assert.AreEqual(typeof(float), lease.ElementType);
+            Assert.AreEqual(8, lease.Length);
+        }
     }
 }
