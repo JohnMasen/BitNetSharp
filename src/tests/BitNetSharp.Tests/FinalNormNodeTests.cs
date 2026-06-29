@@ -1,3 +1,4 @@
+using BitNetSharp.Hosting.CPU;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -70,8 +71,8 @@ namespace BitNetSharp.Tests
                 inferenceConfig: TestInferenceConfigs.Cpu(1));
             var uncachedSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             var cachedSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            testCase.FinalNormInput.Values.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(uncachedSession.Embedding).Span);
-            testCase.FinalNormInput.Values.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(cachedSession.Embedding).Span);
+            testCase.FinalNormInput.Values.CopyTo(RuntimeTensorBufferExtensions.GetMemory<float>(uncachedSession.Embedding).Span);
+            testCase.FinalNormInput.Values.CopyTo(RuntimeTensorBufferExtensions.GetMemory<float>(cachedSession.Embedding).Span);
 
             uncachedNode.Init();
             cachedNode.Init();
@@ -79,7 +80,7 @@ namespace BitNetSharp.Tests
             cachedNode.Forward(cachedSession);
 
             Assert.IsTrue(cachedNode.EnableCache);
-            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(uncachedSession.FinalNormOutput).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(cachedSession.FinalNormOutput).Span.ToArray(), 0f, "final norm cache");
+            AssertFloatArraysAreClose(RuntimeTensorBufferExtensions.GetMemory<float>(uncachedSession.FinalNormOutput).Span.ToArray(), RuntimeTensorBufferExtensions.GetMemory<float>(cachedSession.FinalNormOutput).Span.ToArray(), 0f, "final norm cache");
         }
 
         public static IEnumerable<object[]> GetFinalNormCaseIndices()
@@ -98,12 +99,12 @@ namespace BitNetSharp.Tests
                 model,
                 inferenceConfig: TestInferenceConfigs.Create(backend, 1));
             var session = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            testCase.FinalNormInput.Values.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.Embedding).Span);
+            testCase.FinalNormInput.Values.CopyTo(RuntimeTensorBufferExtensions.GetMemory<float>(session.Embedding).Span);
 
             node.Init();
             node.Forward(session);
 
-            AssertFloatArraysAreClose(testCase.FinalNormOutput.Values, BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.FinalNormOutput).Span.ToArray(), 1e-6f, $"token {testCase.TokenId} ({testCase.TokenText})");
+            AssertFloatArraysAreClose(testCase.FinalNormOutput.Values, RuntimeTensorBufferExtensions.GetMemory<float>(session.FinalNormOutput).Span.ToArray(), 1e-6f, $"token {testCase.TokenId} ({testCase.TokenText})");
         }
 
         private static void VerifyFinalNormMultiThreadMatchesSingleThread(string backend)
@@ -118,15 +119,15 @@ namespace BitNetSharp.Tests
                 inferenceConfig: TestInferenceConfigs.Create(backend, 2));
             var singleThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             var multiThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            testCase.FinalNormInput.Values.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadSession.Embedding).Span);
-            testCase.FinalNormInput.Values.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadSession.Embedding).Span);
+            testCase.FinalNormInput.Values.CopyTo(RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadSession.Embedding).Span);
+            testCase.FinalNormInput.Values.CopyTo(RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadSession.Embedding).Span);
 
             singleThreadNode.Init();
             multiThreadNode.Init();
             singleThreadNode.Forward(singleThreadSession);
             multiThreadNode.Forward(multiThreadSession);
 
-            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadSession.FinalNormOutput).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadSession.FinalNormOutput).Span.ToArray(), 1e-6f, $"{backend} final norm threading");
+            AssertFloatArraysAreClose(RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadSession.FinalNormOutput).Span.ToArray(), RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadSession.FinalNormOutput).Span.ToArray(), 1e-6f, $"{backend} final norm threading");
         }
 
         private static FinalNormVectorsDocument LoadFinalNormVectorsDocument()
@@ -170,3 +171,5 @@ namespace BitNetSharp.Tests
             [property: JsonPropertyName("values")] float[] Values);
     }
 }
+
+

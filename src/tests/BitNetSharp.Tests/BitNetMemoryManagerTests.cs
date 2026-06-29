@@ -1,23 +1,25 @@
+using BitNetSharp.Hosting.CPU;
+using BitNetSharp.Hosting;
 namespace BitNetSharp.Tests
 {
     [TestClass]
     [DoNotParallelize]
     public sealed class BitNetMemoryManagerTests
     {
-        [TestMethod]
-        public void RequestMemory_ReusesBufferForSameSessionAndKey()
-        {
-            using var memoryManager = new BitNetMemoryManager();
-            Guid sessionId = Guid.NewGuid();
+        //[TestMethod]
+        //public void RequestMemory_ReusesBufferForSameSessionAndKey()
+        //{
+        //    using var memoryManager = new BitNetMemoryManager();
+        //    Guid sessionId = Guid.NewGuid();
 
-            Memory<int> buffer = memoryManager.RequestMemory<int>(sessionId, "Tokens", 4);
-            buffer.Span[0] = 13;
+        //    Memory<int> buffer = memoryManager.RequestMemory<int>(sessionId, "Tokens", 4);
+        //    buffer.Span[0] = 13;
 
-            Memory<int> fetched = memoryManager.GetMemory<int>(sessionId, "Tokens");
+        //    Memory<int> fetched = memoryManager.GetMemory<int>(sessionId, "Tokens");
 
-            Assert.AreEqual(4, fetched.Length);
-            Assert.AreEqual(13, fetched.Span[0]);
-        }
+        //    Assert.AreEqual(4, fetched.Length);
+        //    Assert.AreEqual(13, fetched.Span[0]);
+        //}
 
         [TestMethod]
         public void RequestMemory_SameKeyDifferentSessions_ReturnsDifferentBuffers()
@@ -76,3 +78,5 @@ namespace BitNetSharp.Tests
         }
     }
 }
+
+

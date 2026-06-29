@@ -1,6 +1,7 @@
-﻿using BitNetSharp.Models;
+using BitNetSharp.Hosting.CPU;
+using BitNetSharp.Models;
 
-namespace BitNetSharp
+namespace BitNetSharp.Hosting
 {
     public class BitNetSession : IDisposable
     {
@@ -43,6 +44,7 @@ namespace BitNetSharp
             ArgumentNullException.ThrowIfNull(model);
             ArgumentNullException.ThrowIfNull(memoryManager);
 
+            // TODO: Decouple session tensor allocation from CPU memory management so Hosting can remain backend-neutral.
             this.model = model;
             this.memoryManager = memoryManager;
             Id = id;
@@ -367,6 +369,7 @@ namespace BitNetSharp
         private RuntimeTensor CreateRuntimeTensor<T>(string name, int length)
             where T : unmanaged
         {
+            // TODO: Route runtime tensor allocation through a backend-neutral allocator instead of requesting CPU Memory<T> directly.
             Memory<T> memory = memoryManager.RequestMemory<T>(Id, name, length);
             RuntimeTensor tensor = RuntimeTensor.CreateWritable(name, memory, [length]);
 
@@ -466,3 +469,4 @@ namespace BitNetSharp
         }
     }
 }
+

@@ -1,4 +1,4 @@
-namespace BitNetSharp
+namespace BitNetSharp.Hosting
 {
     /// <summary>
     /// Represents a one-shot, disposable rental of a memory block managed by a
@@ -39,3 +39,4 @@ namespace BitNetSharp
         T GetMemoryObject<T>();
     }
 }
+

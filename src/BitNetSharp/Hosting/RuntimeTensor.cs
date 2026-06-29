@@ -1,4 +1,4 @@
-namespace BitNetSharp
+namespace BitNetSharp.Hosting
 {
     public sealed class RuntimeTensor
     {
@@ -75,6 +75,7 @@ namespace BitNetSharp
         /// <summary>
         /// Creates a readonly runtime tensor bound to an existing host buffer.
         /// </summary>
+        // TODO: Add a backend-neutral factory so non-CPU tensors can expose backend-specific buffer handles.
         public static RuntimeTensor CreateReadOnly<T>(string name, ReadOnlyMemory<T> buffer, IEnumerable<int> shape)
             where T : unmanaged
         {
@@ -137,3 +138,4 @@ namespace BitNetSharp
         }
     }
 }
+

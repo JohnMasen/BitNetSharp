@@ -1,3 +1,5 @@
+using BitNetSharp.Hosting.CPU;
+using BitNetSharp.Hosting;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Order;
 using BitNetSharp.Core;
@@ -110,3 +112,5 @@ public class FeedForwardResidualNodeBenchmarks
     }
 
 }
+
+

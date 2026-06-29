@@ -1,6 +1,7 @@
-﻿using System.Buffers;
+using BitNetSharp.Hosting;
+using System.Buffers;
 
-namespace BitNetSharp
+namespace BitNetSharp.Hosting.CPU
 {
     public class BitNetMemoryManager : IDisposable
     {
@@ -9,26 +10,26 @@ namespace BitNetSharp
 
         private sealed record MemoryEntry(IDisposable Owner, int RequestedLength, Type ElementType, int ElementSizeInBytes);
 
-        /// <summary>
-        /// Gets a previously requested memory block for the specified session and key.
-        /// </summary>
-        public Memory<T> GetMemory<T>(Guid id, string key) where T : unmanaged
-        {
-            ObjectDisposedException.ThrowIf(disposed, this);
-            ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        ///// <summary>
+        ///// Gets a previously requested memory block for the specified session and key.
+        ///// </summary>
+        //public Memory<T> GetMemory<T>(Guid id, string key) where T : unmanaged
+        //{
+        //    ObjectDisposedException.ThrowIf(disposed, this);
+        //    ArgumentException.ThrowIfNullOrWhiteSpace(key);
 
-            if (TryGetMemory<T>(id, key, out Memory<T> memory))
-            {
-                return memory;
-            }
+        //    if (TryGetMemory<T>(id, key, out Memory<T> memory))
+        //    {
+        //        return memory;
+        //    }
 
-            if (memorySessions.ContainsKey(id))
-            {
-                throw new InvalidOperationException($"Requested memory not found, key={key}");
-            }
+        //    if (memorySessions.ContainsKey(id))
+        //    {
+        //        throw new InvalidOperationException($"Requested memory not found, key={key}");
+        //    }
 
-            throw new InvalidOperationException($"Requested session not found, id={id}");
-        }
+        //    throw new InvalidOperationException($"Requested session not found, id={id}");
+        //}
 
         /// <summary>
         /// Allocates a pooled memory block for the specified session and key.
@@ -226,3 +227,5 @@ namespace BitNetSharp
         }
     }
 }
+
+

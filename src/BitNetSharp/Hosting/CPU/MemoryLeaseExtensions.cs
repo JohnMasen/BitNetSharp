@@ -1,4 +1,5 @@
-namespace BitNetSharp
+using BitNetSharp.Hosting;
+namespace BitNetSharp.Hosting.CPU
 {
     internal static class MemoryLeaseExtensions
     {
@@ -29,3 +30,4 @@ namespace BitNetSharp
         }
     }
 }
+

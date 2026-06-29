@@ -1,3 +1,5 @@
+using BitNetSharp.Hosting.CPU;
+using BitNetSharp.Hosting;
 using BitNetSharp.Models;
 using GGUFSharp;
 using System.Runtime.InteropServices;
@@ -83,7 +85,7 @@ namespace BitNetSharp.Nodes
                 throw new InvalidOperationException("Embedding tensor dimensions do not match the loaded model configuration.");
             }
 
-            Memory<float> embedding = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.Embedding);
+            Memory<float> embedding = RuntimeTensorBufferExtensions.GetMemory<float>(session.Embedding);
             int rowOffset = checked(session.CurrentToken * embeddingLength);
 
             if (EnableCache)
@@ -125,3 +127,5 @@ namespace BitNetSharp.Nodes
         }
     }
 }
+
+

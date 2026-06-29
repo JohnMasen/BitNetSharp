@@ -1,3 +1,5 @@
+using BitNetSharp.Hosting.CPU;
+using BitNetSharp.Hosting;
 using System.Diagnostics;
 
 namespace BitNetSharp.Nodes
@@ -99,7 +101,7 @@ namespace BitNetSharp.Nodes
                 throw new InvalidOperationException("Session does not contain logits.");
             }
 
-            ReadOnlySpan<float> logits = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetReadOnlyMemory<float>(session.Logits).Span;
+            ReadOnlySpan<float> logits = RuntimeTensorBufferExtensions.GetReadOnlyMemory<float>(session.Logits).Span;
             if (logits.IsEmpty)
             {
                 throw new InvalidOperationException("Session logits must not be empty.");
@@ -287,3 +289,5 @@ namespace BitNetSharp.Nodes
         }
     }
 }
+
+

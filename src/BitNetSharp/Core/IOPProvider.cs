@@ -1,3 +1,4 @@
+using BitNetSharp.Hosting;
 namespace BitNetSharp.Core
 {
     /// <summary>
@@ -51,3 +52,4 @@ namespace BitNetSharp.Core
         void ForwardLmHead(RuntimeTensor input, RuntimeTensor embeddingWeights, int rowLength, int vocabularySize, RuntimeTensor output);
     }
 }
+

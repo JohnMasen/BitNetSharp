@@ -1,3 +1,5 @@
+using BitNetSharp.Hosting.CPU;
+using BitNetSharp.Hosting;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Order;
 using BitNetSharp.Core;
@@ -114,3 +116,4 @@ public class AttentionNodeBenchmarks
         return (RuntimeTensorBufferExtensions.GetMemory<float>(session!.AttentionSubNorm), RuntimeTensorBufferExtensions.GetMemory<float>(session.AttentionOutput));
     }
 }
+

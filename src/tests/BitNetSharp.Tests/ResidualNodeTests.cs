@@ -1,3 +1,4 @@
+using BitNetSharp.Hosting.CPU;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -83,7 +84,7 @@ namespace BitNetSharp.Tests
             node.Init();
             node.Forward(session);
 
-            AssertFloatArraysAreClose(testCase.FirstLayerFfn.FeedForwardInput, BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.FeedForwardInput).Span.ToArray(), 1e-6f, $"token {testCase.TokenId} ({testCase.TokenText})");
+            AssertFloatArraysAreClose(testCase.FirstLayerFfn.FeedForwardInput, RuntimeTensorBufferExtensions.GetMemory<float>(session.FeedForwardInput).Span.ToArray(), 1e-6f, $"token {testCase.TokenId} ({testCase.TokenText})");
         }
 
         private static void VerifyResidualMultiThreadMatchesSingleThread(string backend)
@@ -108,7 +109,7 @@ namespace BitNetSharp.Tests
             singleThreadNode.Forward(singleThreadSession);
             multiThreadNode.Forward(multiThreadSession);
 
-            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadSession.FeedForwardInput).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadSession.FeedForwardInput).Span.ToArray(), 1e-6f, $"{backend} residual threading");
+            AssertFloatArraysAreClose(RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadSession.FeedForwardInput).Span.ToArray(), RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadSession.FeedForwardInput).Span.ToArray(), 1e-6f, $"{backend} residual threading");
         }
 
         private static ResidualVectorsDocument LoadResidualVectorsDocument()
@@ -156,3 +157,5 @@ namespace BitNetSharp.Tests
             [property: JsonPropertyName("ffn_inp")] float[] FeedForwardInput);
     }
 }
+
+

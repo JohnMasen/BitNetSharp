@@ -1,3 +1,4 @@
+using BitNetSharp.Hosting;
 using BitNetSharp.Models;
 using System.Globalization;
 using System.Text;
@@ -109,3 +110,4 @@ namespace BitNetSharp.Console
         }
     }
 }
+

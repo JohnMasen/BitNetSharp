@@ -1,3 +1,4 @@
+using BitNetSharp.Hosting.CPU;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -55,7 +56,7 @@ namespace BitNetSharp.Tests
             uncachedNode.Forward(uncachedContext);
             cachedNode.Forward(cachedContext);
 
-            CollectionAssert.AreEqual(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(uncachedContext.Embedding).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(cachedContext.Embedding).Span.ToArray());
+            CollectionAssert.AreEqual(RuntimeTensorBufferExtensions.GetMemory<float>(uncachedContext.Embedding).Span.ToArray(), RuntimeTensorBufferExtensions.GetMemory<float>(cachedContext.Embedding).Span.ToArray());
             Assert.IsTrue(cachedNode.EnableCache);
         }
 
@@ -72,7 +73,7 @@ namespace BitNetSharp.Tests
 
             node.Init();
             node.Forward(context);
-            float[] actualValues = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(context.Embedding).Span.ToArray();
+            float[] actualValues = RuntimeTensorBufferExtensions.GetMemory<float>(context.Embedding).Span.ToArray();
 
             Assert.HasCount(expectedValues.Length, actualValues, caseName);
             CollectionAssert.AreEqual(expectedValues, actualValues, caseName);
@@ -95,7 +96,7 @@ namespace BitNetSharp.Tests
             var context = TestModelFactory.CreateSession(model, token: 0);
             embeddingNode.Init();
             embeddingNode.Forward(context);
-            float[] input = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(context.Embedding).Span.ToArray();
+            float[] input = RuntimeTensorBufferExtensions.GetMemory<float>(context.Embedding).Span.ToArray();
             var normTensor = model.GetLayer(0).AttentionNorm;
             var node = new BitNetSharp.Nodes.RmsNormNode(
                 model,
@@ -104,7 +105,7 @@ namespace BitNetSharp.Tests
 
             node.Init();
             node.Forward(context);
-            float[] actual = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(context.RmsNorm).Span.ToArray();
+            float[] actual = RuntimeTensorBufferExtensions.GetMemory<float>(context.RmsNorm).Span.ToArray();
             float[] weights = ReadTensorValues(model, normTensor);
             float[] expected = ApplyManualRmsNorm(input, weights, model.Config!.AttentionLayerNormRmsEpsilon);
 
@@ -130,7 +131,7 @@ namespace BitNetSharp.Tests
 
             node.Init();
             node.Forward(context);
-            float[] actualValues = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(context.RmsNorm).Span.ToArray();
+            float[] actualValues = RuntimeTensorBufferExtensions.GetMemory<float>(context.RmsNorm).Span.ToArray();
 
             Assert.HasCount(expectedValues.Length, actualValues, caseName);
             AssertFloatArraysAreClose(expectedValues, actualValues, 1e-6f);
@@ -178,7 +179,7 @@ namespace BitNetSharp.Tests
 
             node.Init();
             node.Forward(context);
-            float[] actualValues = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(context.RmsNorm).Span.ToArray();
+            float[] actualValues = RuntimeTensorBufferExtensions.GetMemory<float>(context.RmsNorm).Span.ToArray();
 
             Assert.HasCount(expectedValues.Length, actualValues, caseName);
             AssertFloatArraysAreClose(expectedValues, actualValues, 1e-6f);
@@ -208,7 +209,7 @@ namespace BitNetSharp.Tests
 
             node.Init();
             node.Forward(context);
-            float[] actualValues = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(context.RmsNorm).Span.ToArray();
+            float[] actualValues = RuntimeTensorBufferExtensions.GetMemory<float>(context.RmsNorm).Span.ToArray();
 
             Assert.HasCount(expectedValues.Length, actualValues, caseName);
             AssertFloatArraysAreClose(expectedValues, actualValues, 1e-6f);
@@ -233,14 +234,14 @@ namespace BitNetSharp.Tests
                 enableCache: true,
                 inferenceConfig: TestInferenceConfigs.Cpu(1));
             var cachedContext = TestModelFactory.CreateSession(model, token: 0);
-            cachedContext.Embedding.CopyFrom<float>(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(context.Embedding).Span.ToArray());
+            cachedContext.Embedding.CopyFrom<float>(RuntimeTensorBufferExtensions.GetMemory<float>(context.Embedding).Span.ToArray());
 
             uncachedNode.Init();
             cachedNode.Init();
             uncachedNode.Forward(context);
             cachedNode.Forward(cachedContext);
-            float[] uncached = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(context.RmsNorm).Span.ToArray();
-            float[] cached = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(cachedContext.RmsNorm).Span.ToArray();
+            float[] uncached = RuntimeTensorBufferExtensions.GetMemory<float>(context.RmsNorm).Span.ToArray();
+            float[] cached = RuntimeTensorBufferExtensions.GetMemory<float>(cachedContext.RmsNorm).Span.ToArray();
 
             Assert.IsTrue(cachedNode.EnableCache);
             AssertFloatArraysAreClose(uncached, cached, 0f);
@@ -264,14 +265,14 @@ namespace BitNetSharp.Tests
                 normTensor,
                 inferenceConfig: TestInferenceConfigs.Tensor(1));
             var tensorContext = TestModelFactory.CreateSession(model, token: 0);
-            tensorContext.Embedding.CopyFrom<float>(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(context.Embedding).Span.ToArray());
+            tensorContext.Embedding.CopyFrom<float>(RuntimeTensorBufferExtensions.GetMemory<float>(context.Embedding).Span.ToArray());
 
             cpuNode.Init();
             tensorNode.Init();
             cpuNode.Forward(context);
             tensorNode.Forward(tensorContext);
-            float[] expected = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(context.RmsNorm).Span.ToArray();
-            float[] actual = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(tensorContext.RmsNorm).Span.ToArray();
+            float[] expected = RuntimeTensorBufferExtensions.GetMemory<float>(context.RmsNorm).Span.ToArray();
+            float[] actual = RuntimeTensorBufferExtensions.GetMemory<float>(tensorContext.RmsNorm).Span.ToArray();
 
             AssertFloatArraysAreClose(expected, actual, 1e-6f);
         }
@@ -294,7 +295,7 @@ namespace BitNetSharp.Tests
                 normTensor,
                 inferenceConfig: TestInferenceConfigs.Simd(1));
             var simdContext = TestModelFactory.CreateSession(model, token: 0);
-            simdContext.Embedding.CopyFrom<float>(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(context.Embedding).Span.ToArray());
+            simdContext.Embedding.CopyFrom<float>(RuntimeTensorBufferExtensions.GetMemory<float>(context.Embedding).Span.ToArray());
 
             cpuNode.Init();
             simdNode.Init();
@@ -307,8 +308,8 @@ namespace BitNetSharp.Tests
 
             cpuNode.Forward(context);
             simdNode.Forward(simdContext);
-            float[] expected = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(context.RmsNorm).Span.ToArray();
-            float[] actual = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(simdContext.RmsNorm).Span.ToArray();
+            float[] expected = RuntimeTensorBufferExtensions.GetMemory<float>(context.RmsNorm).Span.ToArray();
+            float[] actual = RuntimeTensorBufferExtensions.GetMemory<float>(simdContext.RmsNorm).Span.ToArray();
 
             AssertFloatArraysAreClose(expected, actual, 1e-6f);
         }
@@ -388,7 +389,7 @@ namespace BitNetSharp.Tests
             singleThreadNode.Forward(singleThreadContext);
             multiThreadNode.Forward(multiThreadContext);
 
-            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadContext.RmsNorm).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadContext.RmsNorm).Span.ToArray(), 1e-6f);
+            AssertFloatArraysAreClose(RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadContext.RmsNorm).Span.ToArray(), RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadContext.RmsNorm).Span.ToArray(), 1e-6f);
         }
 
         private static float[] ReadTensorValues(BitNetSharp.Models.BitNetModel model, BitNetSharp.Models.BitNetTensorInfo tensorInfo)
@@ -446,3 +447,5 @@ namespace BitNetSharp.Tests
             [property: JsonPropertyName("values")] IReadOnlyList<float> Values);
     }
 }
+
+

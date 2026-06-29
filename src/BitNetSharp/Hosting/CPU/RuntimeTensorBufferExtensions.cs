@@ -1,4 +1,6 @@
-namespace BitNetSharp.Core
+using BitNetSharp.Hosting;
+
+namespace BitNetSharp.Hosting.CPU
 {
     public static class RuntimeTensorBufferExtensions
     {
@@ -29,3 +31,4 @@ namespace BitNetSharp.Core
         }
     }
 }
+

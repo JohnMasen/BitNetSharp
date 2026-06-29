@@ -1,3 +1,4 @@
+using BitNetSharp.Hosting.CPU;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Order;

@@ -1,3 +1,5 @@
+using BitNetSharp.Hosting.CPU;
+using BitNetSharp.Hosting;
 using System.Buffers;
 using System.Runtime.InteropServices;
 
@@ -564,3 +566,5 @@ namespace BitNetSharp.Core
         }
     }
 }
+
+

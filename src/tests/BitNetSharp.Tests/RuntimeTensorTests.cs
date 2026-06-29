@@ -1,3 +1,5 @@
+using BitNetSharp.Hosting.CPU;
+using BitNetSharp.Hosting;
 namespace BitNetSharp.Tests
 {
     [TestClass]
@@ -79,7 +81,7 @@ namespace BitNetSharp.Tests
 
             Assert.IsTrue(hasBuffer);
             CollectionAssert.AreEqual(values, buffer.ToArray());
-            CollectionAssert.AreEqual(values, BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.Embedding).ToArray());
+            CollectionAssert.AreEqual(values, RuntimeTensorBufferExtensions.GetMemory<float>(session.Embedding).ToArray());
         }
 
         [TestMethod]
@@ -101,3 +103,6 @@ namespace BitNetSharp.Tests
         }
     }
 }
+
+
+

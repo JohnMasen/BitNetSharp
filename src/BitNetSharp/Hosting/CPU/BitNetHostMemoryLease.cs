@@ -1,6 +1,7 @@
+using BitNetSharp.Hosting;
 using System.Buffers;
 
-namespace BitNetSharp
+namespace BitNetSharp.Hosting.CPU
 {
     /// <summary>
     /// Default host-memory implementation of <see cref="IMemoryLease"/>. Wraps an
@@ -61,3 +62,5 @@ namespace BitNetSharp
         }
     }
 }
+
+

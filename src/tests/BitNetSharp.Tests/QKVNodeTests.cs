@@ -1,3 +1,5 @@
+using BitNetSharp.Hosting.CPU;
+using BitNetSharp.Hosting;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -89,9 +91,9 @@ namespace BitNetSharp.Tests
             cachedNode.Forward(cachedContext);
 
             Assert.IsTrue(cachedNode.EnableCache);
-            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(uncachedContext.QKVQuery).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(cachedContext.QKVQuery).Span.ToArray(), 0f, "query cache");
-            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(uncachedContext.QKVKey).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(cachedContext.QKVKey).Span.ToArray(), 0f, "key cache");
-            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(uncachedContext.QKVValue).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(cachedContext.QKVValue).Span.ToArray(), 0f, "value cache");
+            AssertFloatArraysAreClose(RuntimeTensorBufferExtensions.GetMemory<float>(uncachedContext.QKVQuery).Span.ToArray(), RuntimeTensorBufferExtensions.GetMemory<float>(cachedContext.QKVQuery).Span.ToArray(), 0f, "query cache");
+            AssertFloatArraysAreClose(RuntimeTensorBufferExtensions.GetMemory<float>(uncachedContext.QKVKey).Span.ToArray(), RuntimeTensorBufferExtensions.GetMemory<float>(cachedContext.QKVKey).Span.ToArray(), 0f, "key cache");
+            AssertFloatArraysAreClose(RuntimeTensorBufferExtensions.GetMemory<float>(uncachedContext.QKVValue).Span.ToArray(), RuntimeTensorBufferExtensions.GetMemory<float>(cachedContext.QKVValue).Span.ToArray(), 0f, "value cache");
         }
 
         [TestMethod]
@@ -181,9 +183,9 @@ namespace BitNetSharp.Tests
             node.Init();
             node.Forward(context);
 
-            AssertFloatArraysAreClose(testCase.FirstLayerAttnQKV.WQKV.Query.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(context.QKVQuery).Span.ToArray(), 1e-4f, caseName + " query");
-            AssertFloatArraysAreClose(testCase.FirstLayerAttnQKV.WQKV.Key.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(context.QKVKey).Span.ToArray(), 1e-4f, caseName + " key");
-            AssertFloatArraysAreClose(testCase.FirstLayerAttnQKV.WQKV.Value.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(context.QKVValue).Span.ToArray(), 1e-4f, caseName + " value");
+            AssertFloatArraysAreClose(testCase.FirstLayerAttnQKV.WQKV.Query.ToArray(), RuntimeTensorBufferExtensions.GetMemory<float>(context.QKVQuery).Span.ToArray(), 1e-4f, caseName + " query");
+            AssertFloatArraysAreClose(testCase.FirstLayerAttnQKV.WQKV.Key.ToArray(), RuntimeTensorBufferExtensions.GetMemory<float>(context.QKVKey).Span.ToArray(), 1e-4f, caseName + " key");
+            AssertFloatArraysAreClose(testCase.FirstLayerAttnQKV.WQKV.Value.ToArray(), RuntimeTensorBufferExtensions.GetMemory<float>(context.QKVValue).Span.ToArray(), 1e-4f, caseName + " value");
         }
 
         private static void VerifyQKVMultiThreadMatchesSingleThread(string backend)
@@ -213,9 +215,9 @@ namespace BitNetSharp.Tests
             singleThreadNode.Forward(singleThreadContext);
             multiThreadNode.Forward(multiThreadContext);
 
-            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadContext.QKVQuery).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadContext.QKVQuery).Span.ToArray(), 1e-4f, $"{backend} QKV query threading");
-            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadContext.QKVKey).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadContext.QKVKey).Span.ToArray(), 1e-4f, $"{backend} QKV key threading");
-            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadContext.QKVValue).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadContext.QKVValue).Span.ToArray(), 1e-4f, $"{backend} QKV value threading");
+            AssertFloatArraysAreClose(RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadContext.QKVQuery).Span.ToArray(), RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadContext.QKVQuery).Span.ToArray(), 1e-4f, $"{backend} QKV query threading");
+            AssertFloatArraysAreClose(RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadContext.QKVKey).Span.ToArray(), RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadContext.QKVKey).Span.ToArray(), 1e-4f, $"{backend} QKV key threading");
+            AssertFloatArraysAreClose(RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadContext.QKVValue).Span.ToArray(), RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadContext.QKVValue).Span.ToArray(), 1e-4f, $"{backend} QKV value threading");
         }
 
         private static void AssertSmallProjectionCpuMatchesSimd(string caseName, int inputLength, int outputLength, int seed, float weightScale)
@@ -342,3 +344,6 @@ namespace BitNetSharp.Tests
             [property: JsonPropertyName("vcur")] float[] Value);
     }
 }
+
+
+

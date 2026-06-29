@@ -1,4 +1,4 @@
-namespace BitNetSharp
+namespace BitNetSharp.Hosting
 {
     public sealed record BitNetMemoryAllocationSnapshot(
         Guid SessionId,
@@ -7,3 +7,4 @@ namespace BitNetSharp
         int RequestedLength,
         long EstimatedBytes);
 }
+

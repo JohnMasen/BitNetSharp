@@ -1,3 +1,5 @@
+using BitNetSharp.Hosting.CPU;
+using BitNetSharp.Hosting;
 using BitNetSharp.Core;
 using BitNetSharp.Models;
 using GGUFSharp;
@@ -125,9 +127,9 @@ namespace BitNetSharp.Nodes
                 throw new InvalidOperationException("Session does not contain complete QKV projection output.");
             }
 
-            ReadOnlyMemory<float> query = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetReadOnlyMemory<float>(session.QKVQuery);
-            ReadOnlyMemory<float> key = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetReadOnlyMemory<float>(session.QKVKey);
-            ReadOnlyMemory<float> value = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetReadOnlyMemory<float>(session.QKVValue);
+            ReadOnlyMemory<float> query = RuntimeTensorBufferExtensions.GetReadOnlyMemory<float>(session.QKVQuery);
+            ReadOnlyMemory<float> key = RuntimeTensorBufferExtensions.GetReadOnlyMemory<float>(session.QKVKey);
+            ReadOnlyMemory<float> value = RuntimeTensorBufferExtensions.GetReadOnlyMemory<float>(session.QKVValue);
             RuntimeTensor subNorm = session.AttentionSubNormTensor;
             RuntimeTensor output = session.AttentionOutputTensor;
             if (EnableCache)
@@ -478,3 +480,5 @@ namespace BitNetSharp.Nodes
         private sealed record PackedProjectionWeights(ReadOnlyMemory<byte> PackedWeights, float Scale);
     }
 }
+
+

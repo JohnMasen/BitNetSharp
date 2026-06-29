@@ -1,3 +1,4 @@
+using BitNetSharp.Hosting.CPU;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -70,8 +71,8 @@ namespace BitNetSharp.Tests
                 inferenceConfig: TestInferenceConfigs.Cpu(1));
             var uncachedSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             var cachedSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            testCase.FinalNormOutput.Values.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(uncachedSession.FinalNormOutput).Span);
-            testCase.FinalNormOutput.Values.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(cachedSession.FinalNormOutput).Span);
+            testCase.FinalNormOutput.Values.CopyTo(RuntimeTensorBufferExtensions.GetMemory<float>(uncachedSession.FinalNormOutput).Span);
+            testCase.FinalNormOutput.Values.CopyTo(RuntimeTensorBufferExtensions.GetMemory<float>(cachedSession.FinalNormOutput).Span);
 
             uncachedNode.Init();
             cachedNode.Init();
@@ -79,7 +80,7 @@ namespace BitNetSharp.Tests
             cachedNode.Forward(cachedSession);
 
             Assert.IsTrue(cachedNode.EnableCache);
-            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(uncachedSession.Logits).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(cachedSession.Logits).Span.ToArray(), 0f, "lm head cache");
+            AssertFloatArraysAreClose(RuntimeTensorBufferExtensions.GetMemory<float>(uncachedSession.Logits).Span.ToArray(), RuntimeTensorBufferExtensions.GetMemory<float>(cachedSession.Logits).Span.ToArray(), 0f, "lm head cache");
         }
 
         public static IEnumerable<object[]> GetLmHeadCaseIndices()
@@ -98,12 +99,12 @@ namespace BitNetSharp.Tests
                 model,
                 inferenceConfig: TestInferenceConfigs.Create(backend, 1));
             var session = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            testCase.FinalNormOutput.Values.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.FinalNormOutput).Span);
+            testCase.FinalNormOutput.Values.CopyTo(RuntimeTensorBufferExtensions.GetMemory<float>(session.FinalNormOutput).Span);
 
             node.Init();
             node.Forward(session);
 
-            AssertFloatArraysAreClose(testCase.LmHead.Logits, BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(session.Logits).Span.ToArray(), 1e-2f, $"token {testCase.TokenId} ({testCase.TokenText})");
+            AssertFloatArraysAreClose(testCase.LmHead.Logits, RuntimeTensorBufferExtensions.GetMemory<float>(session.Logits).Span.ToArray(), 1e-2f, $"token {testCase.TokenId} ({testCase.TokenText})");
         }
 
         private static void VerifyLmHeadMultiThreadMatchesSingleThread(string backend)
@@ -118,15 +119,15 @@ namespace BitNetSharp.Tests
                 inferenceConfig: TestInferenceConfigs.Create(backend, 2));
             var singleThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
             var multiThreadSession = TestModelFactory.CreateSession(model, token: testCase.TokenId);
-            testCase.FinalNormOutput.Values.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadSession.FinalNormOutput).Span);
-            testCase.FinalNormOutput.Values.CopyTo(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadSession.FinalNormOutput).Span);
+            testCase.FinalNormOutput.Values.CopyTo(RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadSession.FinalNormOutput).Span);
+            testCase.FinalNormOutput.Values.CopyTo(RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadSession.FinalNormOutput).Span);
 
             singleThreadNode.Init();
             multiThreadNode.Init();
             singleThreadNode.Forward(singleThreadSession);
             multiThreadNode.Forward(multiThreadSession);
 
-            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadSession.Logits).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadSession.Logits).Span.ToArray(), 1e-2f, $"{backend} lm-head threading");
+            AssertFloatArraysAreClose(RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadSession.Logits).Span.ToArray(), RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadSession.Logits).Span.ToArray(), 1e-2f, $"{backend} lm-head threading");
         }
 
         private static LmHeadVectorsDocument LoadLmHeadVectorsDocument()
@@ -176,3 +177,5 @@ namespace BitNetSharp.Tests
             [property: JsonPropertyName("logits")] float[] Logits);
     }
 }
+
+

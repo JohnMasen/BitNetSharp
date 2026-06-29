@@ -1,3 +1,5 @@
+using BitNetSharp.Hosting.CPU;
+using BitNetSharp.Hosting;
 using BitNetSharp;
 using BitNetSharp.Core;
 using BitNetSharp.Models;
@@ -666,3 +668,5 @@ namespace BitNetSharp.Console
         private sealed record TokenPerformanceSample(int TokenId, string TokenText, long InferenceElapsedMilliseconds, long SamplingElapsedMilliseconds);
     }
 }
+
+

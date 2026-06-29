@@ -1,3 +1,5 @@
+using BitNetSharp.Hosting.CPU;
+using BitNetSharp.Hosting;
 namespace BitNetSharp.Tests
 {
     [TestClass]
@@ -246,3 +248,5 @@ namespace BitNetSharp.Tests
         }
     }
 }
+
+

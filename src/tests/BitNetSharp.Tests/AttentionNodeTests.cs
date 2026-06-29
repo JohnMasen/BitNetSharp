@@ -1,3 +1,5 @@
+using BitNetSharp.Hosting.CPU;
+using BitNetSharp.Hosting;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -91,7 +93,7 @@ namespace BitNetSharp.Tests
 
             node.Init();
             node.Forward(context);
-            Memory<float> actual = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(context.AttentionSubNorm);
+            Memory<float> actual = RuntimeTensorBufferExtensions.GetMemory<float>(context.AttentionSubNorm);
 
             AssertFloatArraysAreClose(testCase.FirstLayerAttnSubNorm.Values.ToArray(), actual.Span.ToArray(), 1e-6f, $"token {testCase.TokenId} ({testCase.TokenText})");
         }
@@ -111,7 +113,7 @@ namespace BitNetSharp.Tests
 
             node.Init();
             node.Forward(context);
-            Memory<float> actual = BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(context.AttentionOutput);
+            Memory<float> actual = RuntimeTensorBufferExtensions.GetMemory<float>(context.AttentionOutput);
 
             AssertFloatArraysAreClose(testCase.FirstLayerAttnOutput.Values.ToArray(), actual.Span.ToArray(), 1e-4f, $"token {testCase.TokenId} ({testCase.TokenText})");
         }
@@ -141,8 +143,8 @@ namespace BitNetSharp.Tests
             singleThreadLayer.Forward(singleThreadContext);
             multiThreadLayer.Forward(multiThreadContext);
 
-            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadContext.AttentionSubNorm).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadContext.AttentionSubNorm).Span.ToArray(), 1e-6f, $"{backend} attention sub-norm threading");
-            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadContext.AttentionOutput).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadContext.AttentionOutput).Span.ToArray(), 1e-4f, $"{backend} attention output threading");
+            AssertFloatArraysAreClose(RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadContext.AttentionSubNorm).Span.ToArray(), RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadContext.AttentionSubNorm).Span.ToArray(), 1e-6f, $"{backend} attention sub-norm threading");
+            AssertFloatArraysAreClose(RuntimeTensorBufferExtensions.GetMemory<float>(singleThreadContext.AttentionOutput).Span.ToArray(), RuntimeTensorBufferExtensions.GetMemory<float>(multiThreadContext.AttentionOutput).Span.ToArray(), 1e-4f, $"{backend} attention output threading");
         }
 
         [TestMethod]
@@ -173,8 +175,8 @@ namespace BitNetSharp.Tests
             cachedNode.Forward(cachedContext);
 
             Assert.IsTrue(cachedNode.EnableCache);
-            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(uncachedContext.AttentionSubNorm).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(cachedContext.AttentionSubNorm).Span.ToArray(), 0f, "attention sub-norm cache");
-            AssertFloatArraysAreClose(BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(uncachedContext.AttentionOutput).Span.ToArray(), BitNetSharp.Core.RuntimeTensorBufferExtensions.GetMemory<float>(cachedContext.AttentionOutput).Span.ToArray(), 0f, "attention output cache");
+            AssertFloatArraysAreClose(RuntimeTensorBufferExtensions.GetMemory<float>(uncachedContext.AttentionSubNorm).Span.ToArray(), RuntimeTensorBufferExtensions.GetMemory<float>(cachedContext.AttentionSubNorm).Span.ToArray(), 0f, "attention sub-norm cache");
+            AssertFloatArraysAreClose(RuntimeTensorBufferExtensions.GetMemory<float>(uncachedContext.AttentionOutput).Span.ToArray(), RuntimeTensorBufferExtensions.GetMemory<float>(cachedContext.AttentionOutput).Span.ToArray(), 0f, "attention output cache");
         }
 
         public static IEnumerable<object[]> GetAttentionCaseIndices()
@@ -196,7 +198,7 @@ namespace BitNetSharp.Tests
             return AttentionVectorsDocumentCache.Value.TestCases[caseIndex];
         }
 
-        private static void SetProjection(global::BitNetSharp.BitNetSession session, AttentionCase testCase)
+        private static void SetProjection(BitNetSession session, AttentionCase testCase)
         {
             session.QKVQuery.CopyFrom<float>(testCase.FirstLayerAttnQKV.WQKV.Query.ToArray());
             session.QKVKey.CopyFrom<float>(testCase.FirstLayerAttnQKV.WQKV.Key.ToArray());
@@ -243,3 +245,6 @@ namespace BitNetSharp.Tests
             [property: JsonPropertyName("vcur")] float[] Value);
     }
 }
+
+
+
