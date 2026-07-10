@@ -28,8 +28,7 @@ public class RmsNormNodeBenchmarks
     public void GlobalSetup()
     {
         memoryManager = new BitNetMemoryManager();
-        model = new BitNetModel();
-        model.Load(BenchmarkProjectPaths.ModelPath);
+        model = new BitNetModelLoader().Load(BenchmarkProjectPaths.ModelPath);
         var normTensor = model.GetLayer(0).AttentionNorm;
         session = new BitNetSession(model, memoryManager, new[] { 0 });
         BenchmarkDataHelper.FillDeterministicValues(RuntimeTensorBufferExtensions.GetMemory<float>(session.Embedding).Span, 2);

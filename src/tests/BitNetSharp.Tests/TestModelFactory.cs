@@ -8,17 +8,8 @@ namespace BitNetSharp.Tests
 
         internal static Models.BitNetModel LoadModel(Models.BitNetModelLoadOptions? options = null)
         {
-            Models.BitNetModel model = new Models.BitNetModel();
-            if (options is null)
-            {
-                model.Load(TestProjectPaths.ModelPath);
-            }
-            else
-            {
-                model.Load(TestProjectPaths.ModelPath, options);
-            }
-
-            return model;
+            Models.BitNetModelLoader loader = new();
+            return loader.Load(TestProjectPaths.ModelPath, options);
         }
 
         internal static BitNetSession CreateSession(Models.BitNetModel model, int token)

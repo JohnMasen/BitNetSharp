@@ -1,7 +1,7 @@
 namespace BitNetSharp.Models
 {
     /// <summary>
-    /// Provides optional model-loading behaviors for <see cref="BitNetModel.Load(string, BitNetModelLoadOptions?)"/>.
+    /// Provides optional model-loading behaviors for <see cref="BitNetModelLoader.Load(string, BitNetModelLoadOptions?)"/>.
     /// </summary>
     public sealed class BitNetModelLoadOptions
     {

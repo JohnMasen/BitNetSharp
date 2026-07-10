@@ -97,6 +97,76 @@ namespace BitNetSharp.Tests
             Assert.AreNotSame(first, second);
         }
 
+        [TestMethod]
+        public void AsWritableRuntimeTensor_WhenSourceChanges_ExposesSameBuffer()
+        {
+            float[] values = [1f, 2f, 3f];
+            RuntimeTensor tensor = values.AsMemory().AsWritableRuntimeTensor("Values", 3);
+
+            values[1] = 4f;
+            Memory<float> buffer = tensor.GetMemory<float>();
+            buffer.Span[2] = 5f;
+
+            CollectionAssert.AreEqual(new[] { 1f, 4f, 5f }, values);
+            Assert.IsFalse(tensor.IsReadOnly);
+        }
+
+        [TestMethod]
+        public void AsReadOnlyRuntimeTensor_ExposesOnlyReadOnlyBuffer()
+        {
+            ReadOnlyMemory<int> values = new[] { 1, 2, 3 };
+            RuntimeTensor tensor = values.AsReadOnlyRuntimeTensor("Values", 3);
+
+            Assert.IsTrue(tensor.TryGet<ReadOnlyMemory<int>>(out ReadOnlyMemory<int> buffer));
+            Assert.IsFalse(tensor.TryGet<Memory<int>>(out _));
+            CollectionAssert.AreEqual(values.ToArray(), buffer.ToArray());
+            Assert.IsTrue(tensor.IsReadOnly);
+        }
+
+        [TestMethod]
+        public void AsWritableRuntimeTensor_WhenShapeDoesNotMatchBuffer_Throws()
+        {
+            float[] values = new float[3];
+
+            Assert.ThrowsExactly<ArgumentException>(() => values.AsMemory().AsWritableRuntimeTensor("Values", 2));
+        }
+
+        [TestMethod]
+        public void AsWritableRuntimeTensor_WhenShapeIsInvalid_Throws()
+        {
+            float[] values = new float[3];
+
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => values.AsMemory().AsWritableRuntimeTensor("Values", 3, 0));
+        }
+
+        [TestMethod]
+        public void AsWritableRuntimeTensor_WhenBufferIsEmpty_Throws()
+        {
+            Assert.ThrowsExactly<ArgumentException>(() => Memory<float>.Empty.AsWritableRuntimeTensor("Values", 1));
+        }
+
+        [TestMethod]
+        public void AsWritableRuntimeTensor_WhenLeaseIsDisposed_ThrowsOnAccess()
+        {
+            var model = GetModel();
+            using var session = TestModelFactory.CreateSession(model, token: 0);
+            IMemoryLease lease = session.LeaseMemory<float>(3, "Values");
+            RuntimeTensor tensor = lease.AsWritableRuntimeTensor<float>("Values", 3);
+            lease.Dispose();
+
+            Assert.ThrowsExactly<ObjectDisposedException>(() => tensor.GetMemory<float>());
+        }
+
+        [TestMethod]
+        public void AsWritableRuntimeTensor_WhenLeaseElementTypeDiffers_Throws()
+        {
+            var model = GetModel();
+            using var session = TestModelFactory.CreateSession(model, token: 0);
+            using IMemoryLease lease = session.LeaseMemory<float>(3, "Values");
+
+            Assert.ThrowsExactly<InvalidOperationException>(() => lease.AsWritableRuntimeTensor<int>("Values", 3));
+        }
+
         private static Models.BitNetModel GetModel()
         {
             return sharedModel ?? throw new InvalidOperationException("RuntimeTensor test model is not initialized.");

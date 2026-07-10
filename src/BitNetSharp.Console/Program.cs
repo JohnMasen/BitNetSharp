@@ -249,8 +249,7 @@ namespace BitNetSharp.Console
         {
             ArgumentNullException.ThrowIfNull(options);
 
-            using var model = new BitNetModel();
-            model.Load(options.ModelPath);
+            using var model = new BitNetModelLoader().Load(options.ModelPath);
             using var memoryManager = new BitNetMemoryManager();
             using var runtime = new BitNetRuntime(model, memoryManager, new InferenceConfig(new CPUSimdOPProvider(0)), topK: options.TopK, enableSampling: options.EnableSampling, samplingSeed: options.SamplingSeed, temperature: options.Temperature, topP: options.TopP, minP: options.MinP, repeatLastN: options.RepeatLastN, repeatPenalty: options.RepeatPenalty);
             bool exitRequested = false;

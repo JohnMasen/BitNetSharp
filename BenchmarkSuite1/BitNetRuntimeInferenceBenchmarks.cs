@@ -29,8 +29,7 @@ public class BitNetRuntimeInferenceBenchmarks
     [GlobalSetup]
     public void GlobalSetup()
     {
-        model = new BitNetModel();
-        model.Load(BenchmarkProjectPaths.ModelPath);
+        model = new BitNetModelLoader().Load(BenchmarkProjectPaths.ModelPath);
         memoryManager = new BitNetMemoryManager();
         cpuSingleThreadRuntime = CreateRuntime(BenchmarkInferenceConfigs.Cpu(1));
         cpuMultiThreadRuntime = CreateRuntime(BenchmarkInferenceConfigs.Cpu(InferenceConfig.AutoThreadCount));

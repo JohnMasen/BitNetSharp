@@ -30,8 +30,7 @@ public class FeedForwardResidualNodeBenchmarks
     public void GlobalSetup()
     {
         memoryManager = new BitNetMemoryManager();
-        model = new BitNetModel();
-        model.Load(BenchmarkProjectPaths.ModelPath);
+        model = new BitNetModelLoader().Load(BenchmarkProjectPaths.ModelPath);
 
         session = new BitNetSession(model, memoryManager, new[] { 0 });
         BenchmarkDataHelper.FillDeterministicValues(RuntimeTensorBufferExtensions.GetMemory<float>(session.FeedForwardInput).Span, 11);

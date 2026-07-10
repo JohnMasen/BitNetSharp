@@ -28,8 +28,7 @@ public class AttentionNodeBenchmarks
     public void GlobalSetup()
     {
         memoryManager = new BitNetMemoryManager();
-        model = new BitNetModel();
-        model.Load(BenchmarkProjectPaths.ModelPath);
+        model = new BitNetModelLoader().Load(BenchmarkProjectPaths.ModelPath);
         var layerDefinition = model.GetLayer(0);
         session = new BitNetSession(model, memoryManager, new[] { 0 });
         BenchmarkDataHelper.FillDeterministicValues(RuntimeTensorBufferExtensions.GetMemory<float>(session.QKVQuery).Span, 23);

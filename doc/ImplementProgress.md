@@ -26,6 +26,7 @@
 | 文本对话 runtime / console 入口 | 已实现（增强版） | 是 | 已新增基于 GGUF/chat runtime 行为对齐的最小 user/assistant 文本对话入口，可通过 `StartConversation` / `ContinueConversation` / `GenerateAssistantReply` / `StreamAssistantReply` / `StreamAssistantReplyWithTokenIds` 驱动会话，并提供 `BitNetSharp.Console` 控制台项目；当前控制台已支持 `--max-new-tokens`、`--top-k`、`--temperature`、`--top-p`、`--min-p`、`--prompt`、`--show-token-ids`、模型信息输出、流式 token 输出、Ctrl+C 中断生成，以及显式启用的可选采样调试 |
 | Console 内存统计与 CSV 导出 | 已实现（第一版） | 是 | `BitNetSharp.Console` 已支持 `--show-memory` 与 `--memory-csv`，可显示 `MemoryManager` 跟踪片段总览，并在外围推导 `Actual KV Cache` / `Allocated KV Cache` 后导出 CSV 明细 |
 | `RuntimeTensor` / Session 张量访问入口 | 已实现（第一版） | 是 | 已引入非泛型 `RuntimeTensor`，并新增 `GetWeightTensor(string)` 与 `GetOrCreateRuntimeTensor(string)`；权重 tensor 由 `BitNetModel` 共享缓存，runtime tensor 由 `BitNetSession` 私有创建 |
+| CPU `RuntimeTensor` binding/access | 已实现（第一版） | 是 | 已新增 `RuntimeTensorCpuBindingExtensions`，可将 `Memory<T>`、`ReadOnlyMemory<T>` 与 `IMemoryLease` 零拷贝绑定为 `RuntimeTensor`；统一校验 shape 与长度，lease binding 在访问时验证生命周期；CPU provider 继续通过 `RuntimeTensorBufferExtensions` 访问具体 host buffer，作为后续设备后端 binding 模板 |
 | `BitNetSession` 多轮输出状态 / `KV cache` 容器 | 已实现（第一版） | 是 | 已支持 append-only token 历史、输出轮次跟踪、当前轮输出视图，以及按层 `K/V cache` tensor 容器；当前 `KV cache` 继续使用按层 key 前缀区分的静态分配存储，并已接入 runtime 过渡链路 |
 | `IOPProvider` RuntimeTensor 迁移 | 已实现（第一版） | 是 | `IOPProvider` 的主要张量输入输出已从 `Memory<T>` / `Span<T>` 迁移到 `RuntimeTensor`；CPU / Tensor / SIMD provider、主要 node、以及运行时过渡编排路径已同步切换 |
 

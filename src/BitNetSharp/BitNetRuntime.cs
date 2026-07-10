@@ -448,7 +448,7 @@ namespace BitNetSharp
 
             using IMemoryOwner<sbyte> quantizedValuesOwner = MemoryPool<sbyte>.Shared.Rent(inputMemory.Length);
             Memory<sbyte> quantizedValues = quantizedValuesOwner.Memory[..inputMemory.Length];
-            RuntimeTensor quantizedTensor = RuntimeTensor.CreateWritable("RuntimeQKVQuantized", quantizedValues, [inputMemory.Length]);
+            RuntimeTensor quantizedTensor = quantizedValues.AsWritableRuntimeTensor("RuntimeQKVQuantized", inputMemory.Length);
             (float activationScale, _) = opProvider.QuantizeBitNetActivations(input, quantizedTensor);
 
             opProvider.ProjectBitNetI2(quantizedTensor, activationScale, CreatePackedWeightTensor(queryWeights.PackedWeights, "RuntimeQKVQueryWeights"), queryOutputLength, queryWeights.Scale, query);
@@ -490,8 +490,8 @@ namespace BitNetSharp
             using IMemoryOwner<float> attentionContextOwner = MemoryPool<float>.Shared.Rent(embeddingLength);
             Memory<float> attentionContext = attentionContextOwner.Memory[..embeddingLength];
             BuildCachedAttentionContext(activeSession, layerIndex, ropeQuery, attentionContext, headCount, keyValueHeadCount, headDimension, keyValueLength, cancellationToken);
-            RuntimeTensor attentionContextTensor = RuntimeTensor.CreateWritable("RuntimeAttentionContext", attentionContext, [embeddingLength]);
-            RuntimeTensor subNormWeightsTensor = RuntimeTensor.CreateReadOnly<float>("RuntimeAttentionSubNormWeights", subNormWeights.AsMemory(0, attentionContext.Length), [attentionContext.Length]);
+            RuntimeTensor attentionContextTensor = attentionContext.AsWritableRuntimeTensor("RuntimeAttentionContext", embeddingLength);
+            RuntimeTensor subNormWeightsTensor = ((ReadOnlyMemory<float>)subNormWeights.AsMemory(0, attentionContext.Length)).AsReadOnlyRuntimeTensor("RuntimeAttentionSubNormWeights", attentionContext.Length);
             opProvider.ForwardRmsNorm(attentionContextTensor, subNormWeightsTensor, model.Config.AttentionLayerNormRmsEpsilon, subNorm);
             opProvider.ProjectBitNetI2(subNorm, CreatePackedWeightTensor(outputWeights.PackedWeights, "RuntimeAttentionOutputWeights"), embeddingLength, outputWeights.Scale, output);
             Memory<float> outputMemory = output.GetMemory<float>();
@@ -522,10 +522,10 @@ namespace BitNetSharp
             Memory<float> up = upOwner.Memory[..feedForwardLength];
             Memory<float> gate = gateOwner.Memory[..feedForwardLength];
             Memory<sbyte> quantizedValues = quantizedValuesOwner.Memory[..inputMemory.Length];
-            RuntimeTensor upTensor = RuntimeTensor.CreateWritable("RuntimeFeedForwardUp", up, [feedForwardLength]);
-            RuntimeTensor gateTensor = RuntimeTensor.CreateWritable("RuntimeFeedForwardGate", gate, [feedForwardLength]);
-            RuntimeTensor quantizedTensor = RuntimeTensor.CreateWritable("RuntimeFeedForwardQuantized", quantizedValues, [inputMemory.Length]);
-            RuntimeTensor subNormWeightsTensor = RuntimeTensor.CreateReadOnly<float>("RuntimeFeedForwardSubNormWeights", subNormWeights.AsMemory(0, feedForwardLength), [feedForwardLength]);
+            RuntimeTensor upTensor = up.AsWritableRuntimeTensor("RuntimeFeedForwardUp", feedForwardLength);
+            RuntimeTensor gateTensor = gate.AsWritableRuntimeTensor("RuntimeFeedForwardGate", feedForwardLength);
+            RuntimeTensor quantizedTensor = quantizedValues.AsWritableRuntimeTensor("RuntimeFeedForwardQuantized", inputMemory.Length);
+            RuntimeTensor subNormWeightsTensor = ((ReadOnlyMemory<float>)subNormWeights.AsMemory(0, feedForwardLength)).AsReadOnlyRuntimeTensor("RuntimeFeedForwardSubNormWeights", feedForwardLength);
             (float activationScale, _) = opProvider.QuantizeBitNetActivations(input, quantizedTensor);
 
             opProvider.ProjectBitNetI2(quantizedTensor, activationScale, CreatePackedWeightTensor(upWeights.PackedWeights, "RuntimeFeedForwardUpWeights"), feedForwardLength, upWeights.Scale, upTensor);
@@ -537,7 +537,7 @@ namespace BitNetSharp
 
         private static RuntimeTensor CreatePackedWeightTensor(ReadOnlyMemory<byte> packedWeights, string name)
         {
-            return RuntimeTensor.CreateReadOnly<byte>(name, packedWeights, [packedWeights.Length]);
+            return packedWeights.AsReadOnlyRuntimeTensor(name, packedWeights.Length);
         }
 
         private static void ApplySquaredReluGate(ReadOnlySpan<float> gate, Span<float> up)
@@ -571,8 +571,8 @@ namespace BitNetSharp
             using IMemoryOwner<float> attentionWeightOwner = MemoryPool<float>.Shared.Rent(cacheLength);
             Memory<float> attentionScore = attentionScoreOwner.Memory[..cacheLength];
             Memory<float> attentionWeight = attentionWeightOwner.Memory[..cacheLength];
-            RuntimeTensor attentionScoreTensor = RuntimeTensor.CreateWritable("RuntimeAttentionScore", attentionScore, [cacheLength]);
-            RuntimeTensor attentionWeightTensor = RuntimeTensor.CreateWritable("RuntimeAttentionWeight", attentionWeight, [cacheLength]);
+            RuntimeTensor attentionScoreTensor = attentionScore.AsWritableRuntimeTensor("RuntimeAttentionScore", cacheLength);
+            RuntimeTensor attentionWeightTensor = attentionWeight.AsWritableRuntimeTensor("RuntimeAttentionWeight", cacheLength);
             for (int headIndex = 0; headIndex < headCount; headIndex++)
             {
                 cancellationToken.ThrowIfCancellationRequested();

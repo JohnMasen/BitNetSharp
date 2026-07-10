@@ -16,8 +16,7 @@ namespace BitNetSharp.Tests
         [ClassInitialize]
         public static void ClassInitialize(TestContext _)
         {
-            sharedModel = new Models.BitNetModel();
-            sharedModel.Load(TestProjectPaths.ModelPath);
+            sharedModel = new Models.BitNetModelLoader().Load(TestProjectPaths.ModelPath);
         }
 
         [ClassCleanup]
