@@ -143,15 +143,14 @@ namespace BitNetSharp.Nodes
         private void ExecuteFeedForward(BitNetSession session, RuntimeTensor input, RuntimeTensor subNormWeights, PackedProjectionWeights gateWeights, PackedProjectionWeights upWeights, PackedProjectionWeights downWeights, int embeddingLength, int feedForwardLength, RuntimeTensor subNormOutput, RuntimeTensor output)
         {
             ReadOnlyMemory<float> inputMemory = input.GetReadOnlyMemory<float>();
-            using IMemoryLease upLease = session.LeaseMemory<float>(feedForwardLength, "FeedForwardUp");
-            using IMemoryLease gateLease = session.LeaseMemory<float>(feedForwardLength, "FeedForwardGate");
-            using IMemoryLease quantizedValuesLease = session.LeaseMemory<sbyte>(inputMemory.Length, "FeedForwardQuantized");
-            Memory<float> up = upLease.GetMemory<float>();
-            Memory<float> gate = gateLease.GetMemory<float>();
-            Memory<sbyte> quantizedValues = quantizedValuesLease.GetMemory<sbyte>();
-            RuntimeTensor upTensor = RuntimeTensor.CreateWritable("FeedForwardUp", up, [feedForwardLength]);
-            RuntimeTensor gateTensor = RuntimeTensor.CreateWritable("FeedForwardGate", gate, [feedForwardLength]);
-            RuntimeTensor quantizedTensor = RuntimeTensor.CreateWritable("FeedForwardQuantized", quantizedValues, [inputMemory.Length]);
+            using IRuntimeTensorLease upLease = session.RentRuntimeTensor<float>("FeedForwardUp", "FeedForwardUp", feedForwardLength);
+            using IRuntimeTensorLease gateLease = session.RentRuntimeTensor<float>("FeedForwardGate", "FeedForwardGate", feedForwardLength);
+            using IRuntimeTensorLease quantizedValuesLease = session.RentRuntimeTensor<sbyte>("FeedForwardQuantized", "FeedForwardQuantized", inputMemory.Length);
+            RuntimeTensor upTensor = upLease.Tensor;
+            RuntimeTensor gateTensor = gateLease.Tensor;
+            RuntimeTensor quantizedTensor = quantizedValuesLease.Tensor;
+            Memory<float> up = upTensor.GetMemory<float>();
+            Memory<float> gate = gateTensor.GetMemory<float>();
             (float activationScale, _) = opProvider.QuantizeBitNetActivations(input, quantizedTensor);
 
             opProvider.ProjectBitNetI2(quantizedTensor, activationScale, CreatePackedWeightTensor(upWeights.PackedWeights, "FeedForwardUpWeights"), feedForwardLength, upWeights.Scale, upTensor);

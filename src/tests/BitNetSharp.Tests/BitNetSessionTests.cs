@@ -134,18 +134,19 @@ namespace BitNetSharp.Tests
         }
 
         [TestMethod]
-        public void LeaseMemory_ReturnsTaggedTypedLease()
+        public void RentRuntimeTensor_ReturnsWritableTypedTensor()
         {
             using var model = TestModelFactory.LoadModel();
             using var memoryManager = new BitNetMemoryManager();
             using var session = new BitNetSession(model, memoryManager);
 
-            using IMemoryLease lease = session.LeaseMemory<float>(6, "FeedForwardUp");
-            Memory<float> memory = lease.GetMemoryObject<Memory<float>>();
+            using IRuntimeTensorLease lease = session.RentRuntimeTensor<float>("FeedForwardUp", "FeedForwardUp", 6);
+            RuntimeTensor tensor = lease.Tensor;
+            Memory<float> memory = tensor.GetMemory<float>();
             memory.Span[0] = 1.25f;
 
-            Assert.AreEqual("FeedForwardUp", lease.Tag);
-            Assert.AreEqual(typeof(float), lease.ElementType);
+            Assert.AreEqual("FeedForwardUp", tensor.Name);
+            Assert.AreEqual(typeof(float), tensor.ElementType);
             Assert.AreEqual(6, memory.Length);
             Assert.AreEqual(1.25f, memory.Span[0]);
         }

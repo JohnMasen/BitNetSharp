@@ -175,10 +175,10 @@ namespace BitNetSharp.Nodes
 
             ValidateProjectionShape(query.Span, key.Span, value.Span);
 
-            using IMemoryLease attentionContextLease = session.LeaseMemory<float>(embeddingLength, "AttentionContext");
-            Memory<float> attentionContext = attentionContextLease.GetMemory<float>();
+            using IRuntimeTensorLease attentionContextLease = session.RentRuntimeTensor<float>("AttentionContext", "AttentionContext", embeddingLength);
+            RuntimeTensor attentionContextTensor = attentionContextLease.Tensor;
+            Memory<float> attentionContext = attentionContextTensor.GetMemory<float>();
             BuildSingleTokenAttentionContext(query, key, value, attentionContext, headCount, keyValueHeadCount, headDimension);
-            RuntimeTensor attentionContextTensor = RuntimeTensor.CreateWritable("AttentionContext", attentionContext, [embeddingLength]);
             opProvider.ForwardRmsNorm(attentionContextTensor, subNormWeights, model.Config.AttentionLayerNormRmsEpsilon, subNorm);
             opProvider.ProjectBitNetI2(subNorm, CreatePackedWeightTensor(outputWeights.PackedWeights, "AttentionOutputWeights"), embeddingLength, outputWeights.Scale, output);
             Memory<float> outputMemory = output.GetMemory<float>();

@@ -107,8 +107,8 @@ namespace BitNetSharp.Nodes
                 throw new InvalidOperationException("Session logits must not be empty.");
             }
 
-            using IMemoryLease adjustedLogitsLease = session.LeaseMemory<float>(logits.Length, "SamplingAdjustedLogits");
-            Memory<float> adjustedLogitsMemory = adjustedLogitsLease.GetMemory<float>();
+            using IRuntimeTensorLease adjustedLogitsLease = session.RentRuntimeTensor<float>("SamplingAdjustedLogits", "SamplingAdjustedLogits", logits.Length);
+            Memory<float> adjustedLogitsMemory = adjustedLogitsLease.Tensor.GetMemory<float>();
             logits.CopyTo(adjustedLogitsMemory.Span);
             Span<float> adjustedLogits = adjustedLogitsMemory.Span;
             ApplyRepeatPenalty(session, adjustedLogits);

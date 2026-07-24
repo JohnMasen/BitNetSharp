@@ -3,7 +3,7 @@ using System.Buffers;
 
 namespace BitNetSharp.Hosting.CPU
 {
-    public class BitNetMemoryManager : IDisposable
+    public class BitNetMemoryManager : IRuntimeMemoryManager
     {
         private readonly Dictionary<Guid, Dictionary<string, MemoryEntry>> memorySessions = new();
         private bool disposed;
@@ -86,6 +86,33 @@ namespace BitNetSharp.Hosting.CPU
 
             IMemoryOwner<T> memoryOwner = MemoryPool<T>.Shared.Rent(size);
             return new BitNetHostMemoryLease<T>(memoryOwner, size, tag);
+        }
+
+        /// <summary>
+        /// Gets or creates a writable CPU-bound runtime tensor for the specified session and tensor name.
+        /// </summary>
+        public RuntimeTensor GetOrCreateRuntimeTensor<T>(Guid sessionId, string name, params int[] shape)
+            where T : unmanaged
+        {
+            ArgumentNullException.ThrowIfNull(shape);
+
+            int length = GetTensorLength(shape);
+            Memory<T> memory = RequestMemory<T>(sessionId, name, length);
+            return memory.AsWritableRuntimeTensor(name, shape);
+        }
+
+        /// <summary>
+        /// Rents a writable CPU-bound runtime tensor for temporary workspace use.
+        /// </summary>
+        public IRuntimeTensorLease RentRuntimeTensor<T>(string name, string? tag = null, params int[] shape)
+            where T : unmanaged
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(name);
+            ArgumentNullException.ThrowIfNull(shape);
+
+            int length = GetTensorLength(shape);
+            IMemoryLease memoryLease = GetMemoryLease<T>(length, tag);
+            return new BitNetHostRuntimeTensorLease<T>(memoryLease, name, shape);
         }
 
         /// <summary>
@@ -224,6 +251,27 @@ namespace BitNetSharp.Hosting.CPU
                 : typeof(T) == typeof(long) || typeof(T) == typeof(ulong) || typeof(T) == typeof(double) ? sizeof(long)
                 : typeof(T) == typeof(bool) ? sizeof(byte)
                 : throw new NotSupportedException($"Element type '{typeof(T)}' is not supported for memory statistics.");
+        }
+
+        private static int GetTensorLength(IReadOnlyList<int> shape)
+        {
+            if (shape.Count == 0)
+            {
+                throw new ArgumentException("Runtime tensor shape must contain at least one dimension.", nameof(shape));
+            }
+
+            int length = 1;
+            for (int index = 0; index < shape.Count; index++)
+            {
+                if (shape[index] <= 0)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(shape), "Runtime tensor dimensions must be positive.");
+                }
+
+                length = checked(length * shape[index]);
+            }
+
+            return length;
         }
     }
 }

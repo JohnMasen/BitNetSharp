@@ -1,4 +1,3 @@
-using BitNetSharp.Hosting.CPU;
 using BitNetSharp.Models;
 
 namespace BitNetSharp.Hosting
@@ -22,29 +21,28 @@ namespace BitNetSharp.Hosting
         internal const string LogitsKey = nameof(Logits);
 
         private readonly BitNetModel model;
-        private readonly BitNetMemoryManager memoryManager;
+        private readonly IRuntimeMemoryManager memoryManager;
         private readonly Dictionary<string, RuntimeTensor> runtimeTensors = new(StringComparer.Ordinal);
         private readonly List<int> inputTokens = [];
         private readonly List<int> outputTokens = [];
         private int currentToken;
         private bool disposed;
 
-        public BitNetSession(BitNetModel model, BitNetMemoryManager memoryManager)
+        public BitNetSession(BitNetModel model, IRuntimeMemoryManager memoryManager)
             : this(model, memoryManager, Guid.NewGuid())
         {
         }
 
-        public BitNetSession(BitNetModel model, BitNetMemoryManager memoryManager, ReadOnlyMemory<int> tokens)
+        public BitNetSession(BitNetModel model, IRuntimeMemoryManager memoryManager, ReadOnlyMemory<int> tokens)
             : this(model, memoryManager, Guid.NewGuid(), tokens)
         {
         }
 
-        public BitNetSession(BitNetModel model, BitNetMemoryManager memoryManager, Guid id)
+        public BitNetSession(BitNetModel model, IRuntimeMemoryManager memoryManager, Guid id)
         {
             ArgumentNullException.ThrowIfNull(model);
             ArgumentNullException.ThrowIfNull(memoryManager);
 
-            // TODO: Decouple session tensor allocation from CPU memory management so Hosting can remain backend-neutral.
             this.model = model;
             this.memoryManager = memoryManager;
             Id = id;
@@ -52,7 +50,7 @@ namespace BitNetSharp.Hosting
             TopKLogits = [];
         }
 
-        public BitNetSession(BitNetModel model, BitNetMemoryManager memoryManager, Guid id, ReadOnlyMemory<int> tokens)
+        public BitNetSession(BitNetModel model, IRuntimeMemoryManager memoryManager, Guid id, ReadOnlyMemory<int> tokens)
             : this(model, memoryManager, id)
         {
             InitializeTokens(tokens);
@@ -294,18 +292,20 @@ namespace BitNetSharp.Hosting
             return tensor;
         }
 
-        public IMemoryLease LeaseMemory<T>(int size, string? tag = null)
+        public IRuntimeTensorLease RentRuntimeTensor<T>(string name, string? tag = null, params int[] shape)
             where T : unmanaged
         {
             ObjectDisposedException.ThrowIf(disposed, this);
-            return memoryManager.GetMemoryLease<T>(size, tag);
+            return memoryManager.RentRuntimeTensor<T>(name, tag, shape);
         }
 
         internal bool HasMemory<T>(string key) where T : unmanaged
         {
             ObjectDisposedException.ThrowIf(disposed, this);
 
-            return runtimeTensors.TryGetValue(key, out RuntimeTensor? tensor) && tensor.TryGet<Memory<T>>(out _);
+            return runtimeTensors.TryGetValue(key, out RuntimeTensor? tensor)
+                && !tensor.IsReadOnly
+                && tensor.ElementType == typeof(T);
         }
 
         internal int GetTokenAt(int index)
@@ -369,9 +369,7 @@ namespace BitNetSharp.Hosting
         private RuntimeTensor CreateRuntimeTensor<T>(string name, int length)
             where T : unmanaged
         {
-            // TODO: Route runtime tensor allocation through a backend-neutral allocator instead of requesting CPU Memory<T> directly.
-            Memory<T> memory = memoryManager.RequestMemory<T>(Id, name, length);
-            RuntimeTensor tensor = RuntimeTensor.CreateWritable(name, memory, [length]);
+            RuntimeTensor tensor = memoryManager.GetOrCreateRuntimeTensor<T>(Id, name, length);
 
             if (runtimeTensors.ContainsKey(name))
             {

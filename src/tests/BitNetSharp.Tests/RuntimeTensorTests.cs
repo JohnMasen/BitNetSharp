@@ -150,21 +150,21 @@ namespace BitNetSharp.Tests
         {
             var model = GetModel();
             using var session = TestModelFactory.CreateSession(model, token: 0);
-            IMemoryLease lease = session.LeaseMemory<float>(3, "Values");
-            RuntimeTensor tensor = lease.AsWritableRuntimeTensor<float>("Values", 3);
+            IRuntimeTensorLease lease = session.RentRuntimeTensor<float>("Values", "Values", 3);
+            RuntimeTensor tensor = lease.Tensor;
             lease.Dispose();
 
             Assert.ThrowsExactly<ObjectDisposedException>(() => tensor.GetMemory<float>());
         }
 
         [TestMethod]
-        public void AsWritableRuntimeTensor_WhenLeaseElementTypeDiffers_Throws()
+        public void RentRuntimeTensor_WhenCreated_ExposesRequestedElementType()
         {
             var model = GetModel();
             using var session = TestModelFactory.CreateSession(model, token: 0);
-            using IMemoryLease lease = session.LeaseMemory<float>(3, "Values");
+            using IRuntimeTensorLease lease = session.RentRuntimeTensor<float>("Values", "Values", 3);
 
-            Assert.ThrowsExactly<InvalidOperationException>(() => lease.AsWritableRuntimeTensor<int>("Values", 3));
+            Assert.AreEqual(typeof(float), lease.Tensor.ElementType);
         }
 
         private static Models.BitNetModel GetModel()
